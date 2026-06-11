@@ -91,16 +91,28 @@ local function show(docset, name, path)
   vim.wo.linebreak = true
   vim.wo.conceallevel = 2
   vim.keymap.set("n", "q", "<cmd>close<cr>", { buffer = buf, desc = "close devdocs page" })
+
+  -- Single-page docsets (e.g. the Lua manual) address entries by anchor;
+  -- jump to the entry's name inside the page instead of staying at the top.
+  if path:find("#", 1, true) then
+    vim.fn.search("\\V" .. vim.fn.escape(name, "\\"), "cw")
+  end
 end
 
 -- Find an index entry by exact name, trying docset prefixes for unqualified
--- words (e.g. vector -> std::vector). Exposed for tests.
+-- words (e.g. vector -> std::vector) and the "name()" form many docsets use
+-- (string.format(), add_library(), str.split()). Exposed for tests.
 function M._find_entry(docset, word)
   local idx = load_index(docset)
   if not idx then return nil end
-  local candidates = { word }
+  local stems = { word }
   for _, p in ipairs(M.config.docsets[docset].prefixes or {}) do
-    table.insert(candidates, p .. word)
+    table.insert(stems, p .. word)
+  end
+  local candidates = {}
+  for _, s in ipairs(stems) do
+    table.insert(candidates, s)
+    table.insert(candidates, s .. "()")
   end
   for _, candidate in ipairs(candidates) do
     for _, e in ipairs(idx.entries) do
