@@ -2,18 +2,10 @@
 
 Offline reference documentation in Neovim, done right.
 
-Docsets come from [devdocs.io](https://devdocs.io) (cpp/c are current
-[cppreference](https://en.cppreference.com) content — C++23 included). Pages
-are converted to **real markdown once at install time** by a converter that
-understands the structures generic HTML→markdown tools mangle:
-
-- cppreference declaration tables → numbered ` ```cpp ` fences
-- revision tables → `*(since/until C++NN)*` annotations
-- numbered overload descriptions → one line each, inline code backticked
-- parameter/member tables → `- **name** — description` lists
-- examples → fenced code blocks your treesitter highlights
-- Sphinx definition lists (python, cmake) → bolded terms with indented bodies
-
+Docsets come from [devdocs.io](https://devdocs.io). Pages are converted to
+**real markdown once at install time** by a converter that understands the
+structures generic HTML→markdown tools mangle (see
+[Language support](#language-support) for what that means per docset).
 Opening a page is just reading a pre-converted `.md` into a scratch buffer:
 no HTML, no subprocess, no pager at view time.
 
@@ -68,22 +60,20 @@ Ctrl-chorded — so normal editor motions stay untouched:
 | `<C-h>` / `g?` | Help screen |
 | `q` | Close the page window |
 
-`gK` is LSP-aware when a language server is attached: on a **variable** it
-resolves the variable's type (`oss` → `std::basic_ostringstream`, via hover's
-`Type: … (aka basic_ostringstream<char>)`), and on a **member** it resolves
-the qualified name (`oss.str()` with the cursor on `str` →
-`std::basic_ostringstream::str`, via clangd's `textDocument/symbolInfo`).
-Candidates are validated against the docset index, falling back to the word
-under the cursor: qualified names work as-is (`std::vector`), bare names try
-the docset's prefixes (`vector` → `std::vector`) and the `name()` form
-(`string.format`, `add_library`) before opening the search picker.
+`gK` resolves what's under the cursor in stages: LSP-derived candidates
+first (the language server knows a variable's type and a member's qualified
+name), each validated against the docset index, then the literal word
+(qualified names as-is, bare names via the docset's `prefixes` and the
+`name()` form), and finally the search picker pre-filled. Per-language
+resolution details live in [Language support](#language-support).
 
 ## Viewers
 
 Two page styles, switched by the `viewer` option:
 
-- **`"markdown"`** (default) — the pre-converted markdown in a scratch
-  buffer. Code fences get treesitter highlighting, and markdown renderers
+- **`"markdown"`** (default) — the pre-converted markdown (prose wrapped at
+  `width` columns) in a scratch buffer. Code fences get treesitter
+  highlighting, and markdown renderers
   ([render-markdown.nvim](https://github.com/MeanderingProgrammer/render-markdown.nvim),
   markview, …) apply their full treatment: bordered code blocks, styled
   headings, decorated lists.
@@ -91,6 +81,76 @@ Two page styles, switched by the `viewer` option:
   required) and displayed through Neovim's `:Man` machinery: troff
   typesetting, bold/underline rendering, `gO` section TOC. Falls back to
   markdown automatically if `pandoc`/`man` are unavailable.
+
+## Language support
+
+The pipeline (download → structure-aware conversion → index → viewers →
+notes) is docset-generic. What differs per language: which HTML structures
+the converter understands, how `gK` resolves symbols, and index naming
+conventions. Each docset's specifics aggregate here.
+
+### C++ (`cpp`) and C (`c`)
+
+- **Source**: current [cppreference](https://en.cppreference.com) — C++23
+  included; the C docset is cppreference's C library.
+- **Converter**: declaration tables → numbered ` ```cpp ` fences with
+  `(since C++NN)` tags; revision tables → `*(since/until C++NN)*`
+  annotations; numbered overload descriptions → one line each; parameter,
+  member, and see-also tables → definition lists; examples → `cpp` + `text`
+  fences.
+- **`gK` with clangd**: variable → its type (`oss` →
+  `std::basic_ostringstream`, typedefs chased via hover's `aka`); member →
+  qualified name (cursor on `str` in `oss.str()` →
+  `std::basic_ostringstream::str`); `auto` → its deduced type. Scope-stripped
+  hover names are re-qualified by namespace-suffix matching (a hover saying
+  just `directory_entry` resolves to `std::filesystem::directory_entry`).
+- **Lookup conventions**: `std::` prefix tried for bare names; `:` joins
+  qualified names under the cursor.
+
+### Python (`python~3.14`)
+
+- **Converter**: Sphinx definition lists → bolded terms with indented
+  bodies.
+- **Lookup conventions**: `.` joins dotted names under the cursor; the
+  index's `name()` form is matched (`str.split` → `str.split()`).
+
+### Lua (`lua~5.1`)
+
+- **Single-page docset**: the whole manual is one page; entries anchor-jump
+  to their section. Default is 5.1 to match Neovim/LuaJIT — switch the slug
+  for 5.4.
+- **Lookup conventions**: `.` joins dotted names; `string.format` →
+  `string.format()`.
+
+### Bash (`bash`)
+
+- **Source**: the GNU Bash manual, split by topic; builtins like `declare`
+  resolve through the index.
+
+### CMake (`cmake`)
+
+- **Converter**: Sphinx definition lists.
+- **Lookup conventions**: command pages use the `name()` form
+  (`add_library` → `add_library()`).
+
+### Adding a language
+
+Everything is config — no code:
+
+```lua
+docsets = {
+  rust = { slug = "rust", lang = "rust" },  -- any slug from devdocs.io/docs.json
+},
+filetypes = { rust = "rust" },              -- gK in rust buffers
+keyword_chars = { rust = ":" },             -- if qualified names need extra chars
+```
+
+Then `:DevdocsUpdate rust`. The converter's generic rules (headings,
+paragraphs, lists, fences, definition lists, tables) cover most docsets;
+`lang` sets the code-fence language for highlighting. Notes work
+immediately at `notes/rust/…`. If a docset renders poorly, its HTML uses
+structures the converter doesn't know yet — add a rule to
+`scripts/convert.py` and document it in a new subsection here.
 
 ## Notes: extending and adding pages
 
@@ -139,7 +199,8 @@ construction.
 require("devdocs").setup({
   data_dir = vim.fn.stdpath("data") .. "/devdocs",
   viewer = "markdown", -- or "man" (see Viewers above)
-  width = 80,          -- man-viewer typeset width (clamped to the window)
+  width = 80,          -- column width: man-viewer typesetting AND markdown
+                       -- prose wrapping (applied at :DevdocsUpdate time)
   split = "horizontal", -- "above"|"below"|"left"|"right" place relative to the
                         -- current window; "horizontal"|"vertical" obey
                         -- 'splitbelow'/'splitright'
@@ -161,10 +222,6 @@ require("devdocs").setup({
   keyword_chars = { cpp = ":", lua = ".", python = "." },
 })
 ```
-
-Add any docset from [devdocs.io/docs.json](https://devdocs.io/docs.json) by
-slug — e.g. `rust = { slug = "rust", lang = "rust" }` plus a `filetypes`
-entry.
 
 ## Tests
 
