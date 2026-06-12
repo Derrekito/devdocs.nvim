@@ -51,9 +51,15 @@ Then download the docsets you want:
 | `:DevdocsUpdate [docset]` | Download + convert |
 | `q` (in a doc page) | Close the page |
 
-`gK` understands qualified names: with the cursor on `std::vector` it looks up
-`std::vector`, and on a bare `vector` it tries the docset's prefixes
-(`std::vector`) before falling back to search.
+`gK` is LSP-aware when a language server is attached: on a **variable** it
+resolves the variable's type (`oss` → `std::basic_ostringstream`, via hover's
+`Type: … (aka basic_ostringstream<char>)`), and on a **member** it resolves
+the qualified name (`oss.str()` with the cursor on `str` →
+`std::basic_ostringstream::str`, via clangd's `textDocument/symbolInfo`).
+Candidates are validated against the docset index, falling back to the word
+under the cursor: qualified names work as-is (`std::vector`), bare names try
+the docset's prefixes (`vector` → `std::vector`) and the `name()` form
+(`string.format`, `add_library`) before opening the search picker.
 
 ## Configuration (defaults shown)
 

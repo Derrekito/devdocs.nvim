@@ -255,8 +255,96 @@ function M.cmd(fargs)
   M.search(table.concat(fargs, " "), docset)
 end
 
--- gK handler: capture the (possibly qualified) word under the cursor and
--- look it up in the buffer's docset.
+-- ── LSP-aware lookup ─────────────────────────────────────────────────────────
+-- The word under the cursor is often not the thing to document: a variable
+-- should resolve to its TYPE (oss -> std::basic_ostringstream) and a member
+-- to Type::member (str -> std::basic_ostringstream::str). clangd knows both:
+-- textDocument/symbolInfo gives {name, containerName} for members, and hover
+-- exposes a variable's type as "Type: `std::ostringstream (aka
+-- basic_ostringstream<char>)`". Candidates are validated against the docset
+-- index, so wrong guesses cost nothing.
+
+-- Normalize a type spelling to index form: drop template args, cv/ref
+-- qualifiers, implementation inline namespaces, and trailing '::'.
+function M._normalize_type(t)
+  t = t:gsub("%b<>", "")
+  t = t:gsub("__cxx11::", ""):gsub("__1::", "")
+  t = t:gsub("const ", ""):gsub("volatile ", "")
+  t = t:gsub("^%s+", ""):gsub("[%s&%*]+$", "")
+  t = t:gsub("::$", "")
+  return t
+end
+
+-- Candidates from a clangd hover markdown blob ("Type: `X (aka Y)`").
+function M._hover_candidates(markdown)
+  local ty = markdown and markdown:match("Type: `([^`\n]+)`")
+  if not ty then return {} end
+  local primary = ty:match("^(.-)%s*%(aka%s") or ty
+  local aka = ty:match("%(aka%s+(.*)%)%s*$")
+  local out = {}
+  for _, raw in ipairs({ primary, aka }) do
+    if raw then
+      local n = M._normalize_type(raw)
+      if n ~= "" then
+        table.insert(out, n)
+        if not n:match("^std::") then table.insert(out, "std::" .. n) end
+      end
+    end
+  end
+  return out
+end
+
+-- Candidate from a clangd textDocument/symbolInfo response (member case).
+function M._symbol_candidates(res)
+  local sym = res and res[1]
+  if not (sym and sym.name) then return {} end
+  local container = M._normalize_type(sym.containerName or "")
+  if container == "" or not container:find("::", 1, true) then
+    -- container is a bare function/file scope, not a qualified type
+    return {}
+  end
+  return { container .. "::" .. sym.name }
+end
+
+-- Ask the buffer's LSP for lookup candidates; cb receives a (possibly empty)
+-- ordered list. Member resolution (symbolInfo) outranks type-of-variable
+-- (hover); both fire in parallel with a guard timeout.
+function M._lsp_candidates(bufnr, cb)
+  if #vim.lsp.get_clients({ bufnr = bufnr }) == 0 then
+    cb({})
+    return
+  end
+  local params = vim.lsp.util.make_position_params(0, "utf-16")
+  local results = { sym = {}, hover = {} }
+  local pending, fired = 2, false
+  local function step()
+    pending = pending - 1
+    if pending > 0 or fired then return end
+    fired = true
+    local out = {}
+    vim.list_extend(out, results.sym)
+    vim.list_extend(out, results.hover)
+    cb(out)
+  end
+  vim.lsp.buf_request(bufnr, "textDocument/symbolInfo", params, function(_, res)
+    results.sym = M._symbol_candidates(res)
+    step()
+  end)
+  vim.lsp.buf_request(bufnr, "textDocument/hover", params, function(_, res)
+    local md = res and res.contents and res.contents.value
+    results.hover = M._hover_candidates(md)
+    step()
+  end)
+  vim.defer_fn(function()
+    if not fired then
+      fired = true
+      cb({})
+    end
+  end, 2000)
+end
+
+-- gK handler: LSP-resolved candidates first (validated against the index),
+-- then the (possibly qualified) word under the cursor.
 function M.lookup_cword()
   local docset = M.config.filetypes[vim.bo.filetype]
   if not docset then return end
@@ -270,7 +358,17 @@ function M.lookup_cword()
   else
     word = vim.fn.expand("<cword>")
   end
-  if word ~= "" then M.open(word, docset) end
+
+  M._lsp_candidates(vim.api.nvim_get_current_buf(), function(candidates)
+    for _, c in ipairs(candidates) do
+      local e = M._find_entry(docset, c)
+      if e then
+        M.open(c, docset)
+        return
+      end
+    end
+    if word ~= "" then M.open(word, docset) end
+  end)
 end
 
 return M

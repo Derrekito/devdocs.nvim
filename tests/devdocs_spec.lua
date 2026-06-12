@@ -77,6 +77,42 @@ describe("devdocs", function()
   end)
 end)
 
+describe("LSP candidate resolution", function()
+  -- fixtures captured from real clangd 22 responses
+  local HOVER = "### variable `oss`\n\n---\nType: `std::ostringstream (aka basic_ostringstream<char>)`\n\n---\n```cpp\n// In f\nstd::ostringstream oss\n```"
+
+  it("normalizes type spellings to index form", function()
+    local d = reload()
+    assert.equals("std::basic_ostringstream", d._normalize_type("std::__cxx11::basic_ostringstream::"))
+    assert.equals("basic_ostringstream", d._normalize_type("basic_ostringstream<char>"))
+    assert.equals("std::string", d._normalize_type("const std::string &"))
+    assert.equals("std::vector", d._normalize_type("std::vector<int, std::allocator<int>> *"))
+  end)
+
+  it("extracts type candidates from clangd hover (aka form)", function()
+    local d = reload()
+    local c = d._hover_candidates(HOVER)
+    assert.same({ "std::ostringstream", "basic_ostringstream", "std::basic_ostringstream" }, c)
+  end)
+
+  it("builds qualified member candidates from symbolInfo", function()
+    local d = reload()
+    assert.same({ "std::basic_ostringstream::str" },
+      d._symbol_candidates({ { name = "str", containerName = "std::basic_ostringstream::" } }))
+    assert.same({}, d._symbol_candidates({ { name = "oss", containerName = "f" } }),
+      "function-scope container is not a type")
+    assert.same({}, d._symbol_candidates(nil))
+  end)
+
+  it("_lsp_candidates returns empty without an LSP client", function()
+    local d = reload()
+    local got
+    d._lsp_candidates(vim.api.nvim_get_current_buf(), function(c) got = c end)
+    vim.wait(500, function() return got ~= nil end, 50)
+    assert.same({}, got)
+  end)
+end)
+
 describe("convert.py", function()
   it("converts cppreference structures to markdown", function()
     local html = [[
