@@ -143,6 +143,8 @@ require("devdocs").setup({
   split = "horizontal", -- "above"|"below"|"left"|"right" place relative to the
                         -- current window; "horizontal"|"vertical" obey
                         -- 'splitbelow'/'splitright'
+  reuse_window = true,  -- one docs window per tab (opens from code adopt it);
+                        -- false: new split per open, for side-by-side pages
   notes_dirs = { "<plugin>/notes" }, -- note sources; first entry is writable
   docsets = {
     cpp    = { slug = "cpp",         lang = "cpp", prefixes = { "std::" } },

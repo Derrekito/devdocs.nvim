@@ -111,19 +111,32 @@ local function map_page_keys(buf, docset)
   end
 end
 
--- Put a page buffer on screen. When the current window is already showing a
--- devdocs page, replace it in place (man-style navigation) and, unless this
--- is back-navigation, push the replaced page onto the window's history.
--- Otherwise open a split.
+-- Put a page buffer on screen: one docs window per tabpage. If any window
+-- on the current tab is showing a devdocs page (the current one, or e.g.
+-- the docs split while the cursor is in code), replace its page in place,
+-- pushing the replaced page onto that window's <C-T> history unless this is
+-- back-navigation. Otherwise open a split per config.
 local function display(buf, page, push)
-  local prev = vim.b[vim.api.nvim_get_current_buf()].devdocs
-  if prev then
-    local win = vim.api.nvim_get_current_win()
-    if push then
-      history[win] = history[win] or {}
-      table.insert(history[win], prev)
+  local target
+  if vim.b[vim.api.nvim_get_current_buf()].devdocs then
+    target = vim.api.nvim_get_current_win()
+  elseif cfg().reuse_window ~= false then
+    for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+      if vim.b[vim.api.nvim_win_get_buf(win)].devdocs then
+        target = win
+        break
+      end
     end
-    vim.api.nvim_win_set_buf(win, buf)
+  end
+
+  if target then
+    local prev = vim.b[vim.api.nvim_win_get_buf(target)].devdocs
+    if push and prev then
+      history[target] = history[target] or {}
+      table.insert(history[target], prev)
+    end
+    vim.api.nvim_win_set_buf(target, buf)
+    vim.api.nvim_set_current_win(target)
   else
     local split_cmds = {
       horizontal = "split",
@@ -137,6 +150,20 @@ local function display(buf, page, push)
     vim.api.nvim_win_set_buf(0, buf)
   end
   vim.b[buf].devdocs = page
+end
+
+-- Buffer names must be unique. The previous page buffer wipes itself once
+-- hidden (bufhidden=wipe), but a namesake can survive hidden in another
+-- tabpage or via timing; drop it before naming the fresh buffer.
+local function claim_buf_name(buf, name)
+  for _, b in ipairs(vim.api.nvim_list_bufs()) do
+    if b ~= buf and vim.api.nvim_buf_is_valid(b) and vim.api.nvim_buf_get_name(b) == name then
+      if vim.fn.bufwinid(b) == -1 then
+        vim.api.nvim_buf_delete(b, { force = true })
+      end
+    end
+  end
+  pcall(vim.api.nvim_buf_set_name, buf, name)
 end
 
 -- ── code highlighting in man pages ──────────────────────────────────────────
@@ -289,7 +316,7 @@ local function show_man(docset, name, path, md_file, push)
       vim.log.levels.WARN)
     vim.bo[buf].filetype = "man"
   end
-  pcall(vim.api.nvim_buf_set_name, buf, "devdocs-man://" .. docset .. "/" .. name)
+  claim_buf_name(buf, "devdocs-man://" .. docset .. "/" .. name)
   vim.bo[buf].bufhidden = "wipe"
   pcall(highlight_man_code, buf, md_file)
   -- (also overrides :Man!'s pager-mode q, which can quit nvim when this is
@@ -309,6 +336,19 @@ end
 -- the man code highlighter) see the merged document.
 function M.show(docset, name, path, push)
   if push == nil then push = true end
+
+  -- Reopening a page that's already on screen just focuses it (close it
+  -- first with q if you want a rebuild, e.g. after editing its notes).
+  if push then
+    for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+      local p = vim.b[vim.api.nvim_win_get_buf(win)].devdocs
+      if p and p.docset == docset and p.name == name then
+        vim.api.nvim_set_current_win(win)
+        vim.notify("devdocs: already open — " .. name, vim.log.levels.INFO)
+        return
+      end
+    end
+  end
   local custom = path:sub(1, 1) == "/"
   local file = custom and path
     or (data.root(docset) .. "/pages-md/" .. path:gsub("#.*$", "") .. ".md")
@@ -339,7 +379,6 @@ function M.show(docset, name, path, push)
 
   local buf = vim.api.nvim_create_buf(false, true) -- scratch, unlisted
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-  vim.api.nvim_buf_set_name(buf, "devdocs://" .. docset .. "/" .. name)
   -- Regular buftype, not nofile: renderers special-case nofile as "LSP hover
   -- float" and pad block-width backgrounds with NormalFloat, which bleeds a
   -- float-colored band to the window edge in a normal split.
@@ -349,6 +388,9 @@ function M.show(docset, name, path, push)
   vim.bo[buf].bufhidden = "wipe"
 
   display(buf, { docset = docset, name = name, path = path }, push)
+  -- Name AFTER displaying: replacing a window's previous page buffer lets it
+  -- wipe (bufhidden), freeing the name a reopened page needs (E95 otherwise).
+  claim_buf_name(buf, "devdocs://" .. docset .. "/" .. name)
   -- Set the filetype only AFTER the buffer is displayed: renderers like
   -- render-markdown.nvim attach on FileType and do their initial paint on the
   -- windows showing the buffer — firing it while hidden leaves the page

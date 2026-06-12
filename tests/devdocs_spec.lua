@@ -164,6 +164,69 @@ describe("devdocs", function()
     vim.cmd.close()
   end)
 
+  it("reopening pages reuses the docs window instead of colliding (E95)", function()
+    local d = reload()
+    local dir = make_fixture()
+    write_file(dir .. "/cpp/pages-md/utility/bar.md", "# std::bar\n\nBar docs.\n")
+    write_file(dir .. "/cpp/index.json", vim.json.encode({ entries = {
+      { name = "std::foo", path = "utility/foo", type = "U" },
+      { name = "std::bar", path = "utility/bar", type = "U" },
+    } }))
+    d.setup({ data_dir = dir })
+
+    d.open("std::foo", "cpp")
+    local docs_win = vim.api.nvim_get_current_win()
+    local wins = #vim.api.nvim_list_wins()
+
+    -- same page again, from the code window: focuses the existing window
+    vim.cmd.wincmd("p")
+    d.open("std::foo", "cpp")
+    assert.equals(docs_win, vim.api.nvim_get_current_win(), "same page focused, not rebuilt")
+    assert.equals(wins, #vim.api.nvim_list_wins(), "no extra window")
+
+    -- a different page from the code window replaces the docs window's page
+    vim.cmd.wincmd("p")
+    d.open("std::bar", "cpp")
+    assert.equals(docs_win, vim.api.nvim_get_current_win(), "docs window reused")
+    assert.equals("devdocs://cpp/std::bar", vim.api.nvim_buf_get_name(0))
+    assert.equals(wins, #vim.api.nvim_list_wins(), "still one docs window")
+
+    -- and the replaced page is on the back-history
+    for _, m in ipairs(vim.api.nvim_buf_get_keymap(0, "n")) do
+      if m.lhs == "<C-T>" then m.callback() end
+    end
+    assert.equals("devdocs://cpp/std::foo", vim.api.nvim_buf_get_name(0), "back to foo")
+    vim.cmd.close()
+  end)
+
+  it("reuse_window = false opens a new split per page", function()
+    local d = reload()
+    local dir = make_fixture()
+    write_file(dir .. "/cpp/pages-md/utility/bar.md", "# std::bar\n\nBar docs.\n")
+    write_file(dir .. "/cpp/index.json", vim.json.encode({ entries = {
+      { name = "std::foo", path = "utility/foo", type = "U" },
+      { name = "std::bar", path = "utility/bar", type = "U" },
+    } }))
+    d.setup({ data_dir = dir, reuse_window = false })
+
+    d.open("std::foo", "cpp")
+    local foo_win = vim.api.nvim_get_current_win()
+    vim.cmd.wincmd("p")
+    d.open("std::bar", "cpp")
+    assert.is_not.equals(foo_win, vim.api.nvim_get_current_win(), "bar got its own window")
+    assert.equals("devdocs://cpp/std::bar", vim.api.nvim_buf_get_name(0))
+    assert.is_true(vim.api.nvim_win_is_valid(foo_win), "foo window untouched")
+    assert.equals("devdocs://cpp/std::foo",
+      vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(foo_win)))
+
+    -- reopening an already-visible page still just focuses it
+    vim.cmd.wincmd("p")
+    d.open("std::foo", "cpp")
+    assert.equals(foo_win, vim.api.nvim_get_current_win(), "existing page focused, no third split")
+    vim.cmd.close()
+    vim.cmd.close()
+  end)
+
   it("split option controls direction and placement of the page window", function()
     local d = reload()
     d.setup({ data_dir = make_fixture(), split = "vertical" })

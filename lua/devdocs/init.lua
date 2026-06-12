@@ -36,6 +36,12 @@ M.config = {
   --                              'splitright')
   -- Following references reuses the page's window either way.
   split = "horizontal",
+  -- true: one docs window per tab — opening a page from a code window adopts
+  --       the existing docs window (replaced page goes on its <C-T> history).
+  -- false: each open from a code window makes a new split (compare pages
+  --       side by side). Following references still replaces in-window, and
+  --       reopening an already-visible page just focuses it.
+  reuse_window = true,
   -- name -> docset definition. slug is the devdocs.io document slug
   -- (https://devdocs.io/docs.json); lang is the default code-fence language
   -- used during conversion; prefixes are tried for unqualified gK lookups.
