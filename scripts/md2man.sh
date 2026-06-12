@@ -1,7 +1,7 @@
 #!/bin/sh
-# Prototype: convert one pre-converted devdocs markdown page to a man page.
+# Convert one pre-converted devdocs markdown page to a man page.
 #
-#   md2man.sh <page.md> <out.3> [title]
+#   md2man.sh <page.md> <out.3> [title] [header]
 #
 # Preprocessing before pandoc's gfm reader:
 #   - drop the leading h1 (the .TH header already carries the title)
@@ -15,11 +15,12 @@ set -e
 md=$1
 out=$2
 title=${3:-$(sed -n '1s/^# //p' "$md")}
+header=${4:-Reference Manual}
 
 sed -e '1{/^# /d}' -e 's/^\([0-9][0-9,-]*\))/\n\1\\)/' "$md" |
   pandoc -s -f gfm -t man \
     --shift-heading-level-by=-2 \
     --metadata title="$title" \
     --metadata section=3 \
-    --metadata header="C++ Programmer's Manual" \
+    --metadata header="$header" \
     -o "$out"

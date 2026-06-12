@@ -21,6 +21,10 @@ no HTML, no subprocess, no pager at view time.
 
 - `curl`, `python` with `beautifulsoup4` + `lxml` (conversion only)
 - [telescope.nvim](https://github.com/nvim-telescope/telescope.nvim)
+- `pandoc` + `man` (only for `viewer = "man"`)
+
+Run `:checkhealth devdocs` to verify everything, including which docsets are
+installed.
 
 ## Installation
 
@@ -49,7 +53,20 @@ Then download the docsets you want:
 | `:Devdocs <query>` | Browse, pre-filtered |
 | `:Devdocs <docset> [query]` | Browse one docset |
 | `:DevdocsUpdate [docset]` | Download + convert |
-| `q` (in a doc page) | Close the page |
+
+Inside a doc page, press `<C-h>` (or `g?`) for the built-in help screen.
+Paging and search use Neovim's native keys — same letters as `less`, just
+Ctrl-chorded — so normal editor motions stay untouched:
+
+| Key | Action |
+|---|---|
+| `<C-f>` / `<C-b>` | Page forward / back |
+| `<C-d>` / `<C-u>` | Half page forward / back |
+| `K` / `<C-]>` / `gK` | Follow the reference under the cursor (same docset, replaces in-window) |
+| `<C-T>` | Back to the previous page |
+| `gO` | Section TOC (man viewer) |
+| `<C-h>` / `g?` | Help screen |
+| `q` | Close the page window |
 
 `gK` is LSP-aware when a language server is attached: on a **variable** it
 resolves the variable's type (`oss` → `std::basic_ostringstream`, via hover's
@@ -61,11 +78,27 @@ under the cursor: qualified names work as-is (`std::vector`), bare names try
 the docset's prefixes (`vector` → `std::vector`) and the `name()` form
 (`string.format`, `add_library`) before opening the search picker.
 
+## Viewers
+
+Two page styles, switched by the `viewer` option:
+
+- **`"markdown"`** (default) — the pre-converted markdown in a scratch
+  buffer. Code fences get treesitter highlighting, and markdown renderers
+  ([render-markdown.nvim](https://github.com/MeanderingProgrammer/render-markdown.nvim),
+  markview, …) apply their full treatment: bordered code blocks, styled
+  headings, decorated lists.
+- **`"man"`** — the page converted to a man page on the fly (`pandoc`
+  required) and displayed through Neovim's `:Man` machinery: troff
+  typesetting, bold/underline rendering, `gO` section TOC. Falls back to
+  markdown automatically if `pandoc`/`man` are unavailable.
+
 ## Configuration (defaults shown)
 
 ```lua
 require("devdocs").setup({
   data_dir = vim.fn.stdpath("data") .. "/devdocs",
+  viewer = "markdown", -- or "man" (see Viewers above)
+  width = 80,          -- man-viewer typeset width (clamped to the window)
   docsets = {
     cpp    = { slug = "cpp",         lang = "cpp", prefixes = { "std::" } },
     c      = { slug = "c",           lang = "c" },

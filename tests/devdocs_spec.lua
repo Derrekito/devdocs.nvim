@@ -62,6 +62,125 @@ describe("devdocs", function()
     vim.cmd.close()
   end)
 
+  it("doc pages navigate man-style: follow replaces in-window, <C-T> goes back", function()
+    local d = reload()
+    local dir = make_fixture()
+    write_file(dir .. "/cpp/pages-md/utility/bar.md", "# std::bar\n\nBar docs, see `std::foo`.\n")
+    write_file(dir .. "/cpp/index.json", vim.json.encode({ entries = {
+      { name = "std::foo", path = "utility/foo", type = "U" },
+      { name = "std::bar", path = "utility/bar", type = "U" },
+    } }))
+    d.setup({ data_dir = dir })
+
+    local wins_before = #vim.api.nvim_list_wins()
+    d.open("std::bar", "cpp")
+    assert.equals("devdocs://cpp/std::bar", vim.api.nvim_buf_get_name(0))
+    assert.equals(wins_before + 1, #vim.api.nvim_list_wins(), "first page opens a split")
+
+    local function buf_map(lhs)
+      for _, m in ipairs(vim.api.nvim_buf_get_keymap(0, "n")) do
+        if m.lhs == lhs then return m end
+      end
+    end
+    assert.is_not_nil(buf_map("K"), "K mapped in doc buffer")
+    assert.is_not_nil(buf_map("gK"), "gK mapped in doc buffer")
+
+    -- follow the std::foo reference with K
+    vim.fn.search("std::foo")
+    buf_map("K").callback()
+    assert.equals("devdocs://cpp/std::foo", vim.api.nvim_buf_get_name(0), "followed reference")
+    assert.equals(wins_before + 1, #vim.api.nvim_list_wins(), "follow reuses the window")
+
+    -- <C-T> back to the previous page
+    buf_map("<C-T>").callback()
+    assert.equals("devdocs://cpp/std::bar", vim.api.nvim_buf_get_name(0), "back-navigated")
+
+    -- g? / <C-H> open the less-style help float; q closes it
+    local help = buf_map("g?")
+    assert.is_not_nil(help, "g? mapped for pager help")
+    assert.is_not_nil(buf_map("<C-H>"), "<C-H> mapped for pager help")
+    assert.is_nil(buf_map("h"), "h motion left untouched")
+    help.callback()
+    local cfg = vim.api.nvim_win_get_config(0)
+    assert.is_truthy(cfg.relative ~= "", "help is a floating window")
+    vim.cmd.close() -- help float
+    vim.cmd.close() -- doc page
+  end)
+
+  it("viewer='man' highlights code blocks via treesitter string parsing", function()
+    local d = reload()
+    local dir = make_fixture()
+    -- 'c' parser ships with nvim core (cpp needs nvim-treesitter, absent in
+    -- the --noplugin test env)
+    write_file(dir .. "/cpp/pages-md/utility/foo.md", table.concat({
+      "# std::foo",
+      "",
+      "Intro text.",
+      "",
+      "```c",
+      "int main(void) { return 42; }",
+      "```",
+      "",
+    }, "\n"))
+    d.setup({ data_dir = dir, viewer = "man" })
+    d.open("std::foo", "cpp")
+
+    local buf = vim.api.nvim_get_current_buf()
+    assert.equals("man", vim.bo[buf].filetype)
+    local ns = vim.api.nvim_get_namespaces()["devdocs.code"]
+    local marks = vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })
+    assert.is_true(#marks > 1, "code block got background + syntax extmarks, got " .. #marks)
+    local has_bg, has_syntax = false, false
+    for _, m in ipairs(marks) do
+      if m[4].line_hl_group == "DevdocsCodeBlock" then has_bg = true end
+      if (m[4].hl_group or ""):match("^@") then has_syntax = true end
+    end
+    assert.is_true(has_bg, "block background applied")
+    assert.is_true(has_syntax, "treesitter captures applied")
+    vim.cmd.close()
+  end)
+
+  it("viewer='man' shows the page through :Man machinery", function()
+    local d = reload()
+    d.setup({ data_dir = make_fixture(), viewer = "man" })
+    d.open("foo", "cpp")
+    local buf = vim.api.nvim_get_current_buf()
+    assert.equals("man", vim.bo[buf].filetype, "Man! applied")
+    local text = table.concat(vim.api.nvim_buf_get_lines(buf, 0, 5, false), "\n")
+    assert.is_truthy(text:match("std::foo"), "title present in rendered page")
+    vim.cmd.close()
+  end)
+
+  it("viewer='man' keeps troff warnings out of the page", function()
+    local d = reload()
+    local dir = make_fixture()
+    -- an unbreakable word longer than the typeset width makes troff warn on
+    -- stderr ("cannot break line"); that must never appear as page content
+    write_file(dir .. "/cpp/pages-md/utility/foo.md",
+      "# std::foo\n\n" .. string.rep("x", 120) .. " end of text.\n")
+    d.setup({ data_dir = dir, viewer = "man", width = 60 })
+    d.open("std::foo", "cpp")
+    local buf = vim.api.nvim_get_current_buf()
+    for _, l in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
+      assert.is_falsy(l:match("^troff:"), "troff warning leaked into buffer: " .. l)
+    end
+    vim.cmd.close()
+  end)
+
+  it("viewer='man' typesets at the configured width", function()
+    local d = reload()
+    d.setup({ data_dir = make_fixture(), viewer = "man", width = 60 })
+    d.open("foo", "cpp")
+    local buf = vim.api.nvim_get_current_buf()
+    local max = 0
+    for _, l in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
+      max = math.max(max, vim.fn.strdisplaywidth(l))
+    end
+    assert.is_true(max <= 60, "no rendered line exceeds width=60, widest was " .. max)
+    assert.is_true(max >= 50, "header line typeset near the full width, widest was " .. max)
+    vim.cmd.close()
+  end)
+
   it("lookup_cword resolves the docset from the buffer filetype", function()
     local d = reload()
     d.setup({ data_dir = make_fixture() })
@@ -102,6 +221,16 @@ describe("LSP candidate resolution", function()
     assert.same({}, d._symbol_candidates({ { name = "oss", containerName = "f" } }),
       "function-scope container is not a type")
     assert.same({}, d._symbol_candidates(nil))
+  end)
+
+  it("tolerates vim.NIL (JSON null) in LSP responses", function()
+    local d = reload()
+    -- clangd sends containerName: null for project-local symbols like
+    -- LinuxParser::UpTime resolved at namespace scope
+    assert.same({}, d._symbol_candidates({ { name = "UpTime", containerName = vim.NIL } }))
+    assert.same({}, d._symbol_candidates({ { name = vim.NIL } }))
+    assert.same({}, d._hover_candidates(vim.NIL))
+    assert.equals("", d._normalize_type(vim.NIL))
   end)
 
   it("_lsp_candidates returns empty without an LSP client", function()
