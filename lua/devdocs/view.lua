@@ -295,21 +295,42 @@ end
 
 -- Show a page (path without #anchor). push=false means back-navigation
 -- (don't record the page we're leaving in the window history).
+-- An absolute path is a custom notes page served directly from its file;
+-- otherwise the generated page is read and any annotations from the
+-- configured notes_dirs are appended before rendering, so both viewers (and
+-- the man code highlighter) see the merged document.
 function M.show(docset, name, path, push)
   if push == nil then push = true end
-  local file = data.root(docset) .. "/pages-md/" .. path:gsub("#.*$", "") .. ".md"
+  local custom = path:sub(1, 1) == "/"
+  local file = custom and path
+    or (data.root(docset) .. "/pages-md/" .. path:gsub("#.*$", "") .. ".md")
   if vim.fn.filereadable(file) == 0 then
     vim.notify("devdocs: page missing: " .. file .. " — run :DevdocsUpdate " .. docset,
       vim.log.levels.WARN)
     return
   end
 
-  if cfg().viewer == "man" and show_man(docset, name, path, file, push) then
-    return
+  local lines = vim.fn.readfile(file)
+  local annotations = custom and {} or require("devdocs.notes").annotations(docset, path)
+  for _, a in ipairs(annotations) do
+    table.insert(lines, "")
+    vim.list_extend(lines, vim.fn.readfile(a))
+  end
+
+  if cfg().viewer == "man" then
+    local md_file, tmp = file, nil
+    if #annotations > 0 then
+      tmp = vim.fn.tempname() .. ".md"
+      vim.fn.writefile(lines, tmp)
+      md_file = tmp
+    end
+    local shown = show_man(docset, name, path, md_file, push)
+    if tmp then os.remove(tmp) end
+    if shown then return end
   end
 
   local buf = vim.api.nvim_create_buf(false, true) -- scratch, unlisted
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.fn.readfile(file))
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.api.nvim_buf_set_name(buf, "devdocs://" .. docset .. "/" .. name)
   vim.bo[buf].modifiable = false
   vim.bo[buf].bufhidden = "wipe"

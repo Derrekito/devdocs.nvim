@@ -51,6 +51,12 @@ M.config = {
 local data = require("devdocs.data")
 local view = require("devdocs.view")
 local lsp = require("devdocs.lsp")
+local notes = require("devdocs.notes")
+
+-- Note sources: directories whose files extend pages (same relative path) or
+-- add custom ones (any other path). Curated content ships inside the plugin;
+-- append your own directories via setup().
+M.config.notes_dirs = { data.plugin_root() .. "/notes" }
 
 function M.setup(opts)
   M.config = vim.tbl_deep_extend("force", M.config, opts or {})
@@ -62,7 +68,8 @@ end
 M.installed = data.installed
 M.update = data.update
 
--- Exact lookup; falls back to the picker pre-filtered with the word.
+-- Exact lookup (index, then custom notes pages); falls back to the picker
+-- pre-filtered with the word.
 function M.open(word, docset)
   if not data.load_index(docset) then
     vim.notify("devdocs: docset '" .. docset .. "' not installed — run :DevdocsUpdate " .. docset,
@@ -70,6 +77,10 @@ function M.open(word, docset)
     return
   end
   local entry = data.find_entry(docset, word)
+  if not entry then
+    local c = notes.find_custom(docset, word)
+    if c then entry = { name = c.name, path = c.file } end
+  end
   if entry then
     view.show(docset, entry.name, entry.path)
   else
@@ -96,6 +107,16 @@ function M.search(query, docset)
           label = tag and ("[" .. name .. "] " .. e.name) or e.name,
         })
       end
+    end
+  end
+  -- custom notes pages, tagged so their provenance is visible
+  for _, e in ipairs(notes.custom_entries()) do
+    if not docset or e.docset == docset then
+      table.insert(items, {
+        docset = e.docset,
+        entry = { name = e.name, path = e.file },
+        label = (tag and ("[" .. e.docset .. "] ") or "") .. e.name .. "  [notes]",
+      })
     end
   end
 
@@ -133,6 +154,32 @@ function M.cmd(fargs)
     docset = table.remove(fargs, 1)
   end
   M.search(table.concat(fargs, " "), docset)
+end
+
+-- :DevdocsNote — open (creating if needed) the annotation file for the doc
+-- page in the current window; for a custom notes page, edit its source.
+function M.note()
+  local page = vim.b.devdocs
+  if not page then
+    vim.notify("devdocs: :DevdocsNote works inside a doc page", vim.log.levels.WARN)
+    return
+  end
+  if page.path:sub(1, 1) == "/" then
+    vim.cmd.vsplit(page.path)
+    return
+  end
+  local f = notes.note_file(page.docset, page.path)
+  if not f then
+    vim.notify("devdocs: no notes_dirs configured", vim.log.levels.WARN)
+    return
+  end
+  local new = vim.fn.filereadable(f) == 0
+  vim.fn.mkdir(vim.fn.fnamemodify(f, ":h"), "p")
+  vim.cmd.vsplit(f)
+  if new then
+    -- seed with an h3 heading: the man converter turns ### into a proper .SH
+    vim.api.nvim_buf_set_lines(0, 0, -1, false, { "### Notes", "", "" })
+  end
 end
 
 -- gK handler: LSP-resolved candidates first (validated against the index),

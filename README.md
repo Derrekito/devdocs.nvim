@@ -92,6 +92,47 @@ Two page styles, switched by the `viewer` option:
   typesetting, bold/underline rendering, `gO` section TOC. Falls back to
   markdown automatically if `pandoc`/`man` are unavailable.
 
+## Notes: extending and adding pages
+
+Upstream reference pages are sometimes thin on *how to actually use*
+things. Notes fix that — for **any docset** — without ever touching
+generated files (which `:DevdocsUpdate` rebuilds wholesale). A note is a
+plain markdown file whose location decides what it does:
+
+```
+notes/
+├── cpp/
+│   ├── filesystem/directory_iterator.md   annotation: appended to the
+│   │                                      std::filesystem::directory_iterator page
+│   └── guides/error-handling.md           custom page: "# Error handling patterns"
+├── cmake/
+│   └── command/add_library.md             annotation: extends add_library()
+└── python/
+    └── guides/venv-quickstart.md          custom page, searchable via :Devdocs
+```
+
+- **Annotation** — a file mirroring a generated page's path. Appended to
+  that page in both viewers; fenced code examples get full treesitter
+  highlighting, man mode included.
+- **Custom page** — any other path. Indexed by its first `# heading`,
+  searchable via `:Devdocs` (tagged `[notes]`), reachable by exact-name
+  `gK`.
+
+The same layout works for every docset in your config — add a `rust`
+docset and `notes/rust/…` works immediately, nothing else to wire up.
+
+**Authoring workflow**: open a page, run `:DevdocsNote`, write, save —
+the next view shows the merged result. Conventions and the quality bar
+for shipped notes live in [`notes/README.md`](notes/README.md).
+
+**Sources are layered**: `notes_dirs` is a list. Curated notes ship with
+the plugin in `notes/`; append personal directories via
+`setup({ notes_dirs = { ... } })` (the first entry is where `:DevdocsNote`
+creates files — put your own directory first if you don't want to write
+into the plugin checkout). All sources that have a file for a page are
+appended in list order. Notes survive docset updates and reinstalls by
+construction.
+
 ## Configuration (defaults shown)
 
 ```lua
@@ -99,6 +140,7 @@ require("devdocs").setup({
   data_dir = vim.fn.stdpath("data") .. "/devdocs",
   viewer = "markdown", -- or "man" (see Viewers above)
   width = 80,          -- man-viewer typeset width (clamped to the window)
+  notes_dirs = { "<plugin>/notes" }, -- note sources; first entry is writable
   docsets = {
     cpp    = { slug = "cpp",         lang = "cpp", prefixes = { "std::" } },
     c      = { slug = "c",           lang = "c" },

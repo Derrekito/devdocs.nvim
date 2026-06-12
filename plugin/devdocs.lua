@@ -19,6 +19,10 @@ vim.api.nvim_create_user_command("DevdocsUpdate", function(opts)
   require("devdocs").update(opts.fargs[1])
 end, { nargs = "?", complete = docset_names, desc = "Download + convert devdocs docsets" })
 
+vim.api.nvim_create_user_command("DevdocsNote", function()
+  require("devdocs").note()
+end, { desc = "Annotate the current devdocs page" })
+
 -- Buffer-local gK in any filetype that maps to a docset. Checked at fire
 -- time so setup() can run before or after this file is sourced.
 vim.api.nvim_create_autocmd("FileType", {

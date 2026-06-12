@@ -196,6 +196,69 @@ describe("devdocs", function()
   end)
 end)
 
+describe("notes", function()
+  local function setup_with_notes()
+    local d = reload()
+    local dir = make_fixture()
+    local ndir = vim.fn.tempname()
+    -- annotation for the existing std::foo page
+    write_file(ndir .. "/cpp/utility/foo.md",
+      "### Gotchas\n\nFoo annotation text.\n\n```c\nint x = 1;\n```\n")
+    -- custom page (no matching generated page)
+    write_file(ndir .. "/cpp/guides/foo-patterns.md",
+      "# Foo patterns\n\nCustom page content.\n")
+    d.setup({ data_dir = dir, notes_dirs = { ndir } })
+    return d, dir, ndir
+  end
+
+  it("annotations are appended to the page in the markdown viewer", function()
+    local d = setup_with_notes()
+    d.open("std::foo", "cpp")
+    local text = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n")
+    assert.is_truthy(text:match("Foo docs%."), "original page content present")
+    assert.is_truthy(text:match("### Gotchas"), "annotation heading present")
+    assert.is_truthy(text:match("Foo annotation text"), "annotation body present")
+    vim.cmd.close()
+  end)
+
+  it("annotations render in the man viewer too", function()
+    local d = setup_with_notes()
+    require("devdocs").setup({ viewer = "man" })
+    d.open("std::foo", "cpp")
+    local text = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n")
+    assert.equals("man", vim.bo.filetype)
+    assert.is_truthy(text:match("Gotchas"), "annotation section typeset")
+    assert.is_truthy(text:match("Foo annotation text"), "annotation body typeset")
+    vim.cmd.close()
+  end)
+
+  it("custom pages are indexed by heading and open from their file", function()
+    local d = setup_with_notes()
+    local entries = require("devdocs.notes").custom_entries()
+    assert.equals(1, #entries)
+    assert.equals("Foo patterns", entries[1].name)
+    assert.equals("cpp", entries[1].docset)
+
+    d.open("Foo patterns", "cpp")
+    assert.equals("devdocs://cpp/Foo patterns", vim.api.nvim_buf_get_name(0))
+    local text = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n")
+    assert.is_truthy(text:match("Custom page content"))
+    vim.cmd.close()
+  end)
+
+  it(":DevdocsNote opens (and seeds) the annotation file for the page", function()
+    local d, _, ndir = setup_with_notes()
+    -- remove the existing annotation so note() takes the create-and-seed path
+    os.remove(ndir .. "/cpp/utility/foo.md")
+    d.open("std::foo", "cpp")
+    d.note()
+    assert.equals(ndir .. "/cpp/utility/foo.md", vim.api.nvim_buf_get_name(0))
+    assert.equals("### Notes", vim.api.nvim_buf_get_lines(0, 0, 1, false)[1], "seeded heading")
+    vim.cmd("bwipeout!") -- discard the unsaved note
+    vim.cmd.close()
+  end)
+end)
+
 describe("LSP candidate resolution", function()
   -- fixtures captured from real clangd 22 responses
   local HOVER = "### variable `oss`\n\n---\nType: `std::ostringstream (aka basic_ostringstream<char>)`\n\n---\n```cpp\n// In f\nstd::ostringstream oss\n```"
