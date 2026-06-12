@@ -81,12 +81,16 @@ local function show(docset, name, path)
   local buf = vim.api.nvim_create_buf(false, true) -- scratch, unlisted
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.fn.readfile(file))
   vim.api.nvim_buf_set_name(buf, "devdocs://" .. docset .. "/" .. name)
-  vim.bo[buf].filetype = "markdown"
   vim.bo[buf].modifiable = false
   vim.bo[buf].bufhidden = "wipe"
 
   vim.cmd.split()
   vim.api.nvim_win_set_buf(0, buf)
+  -- Set the filetype only AFTER the buffer is displayed: renderers like
+  -- render-markdown.nvim attach on FileType and do their initial paint on the
+  -- windows showing the buffer — firing it while hidden leaves the page
+  -- unrendered (attached but never painted).
+  vim.bo[buf].filetype = "markdown"
   vim.wo.wrap = true
   vim.wo.linebreak = true
   vim.wo.conceallevel = 2
