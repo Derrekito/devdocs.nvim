@@ -125,7 +125,15 @@ local function display(buf, page, push)
     end
     vim.api.nvim_win_set_buf(win, buf)
   else
-    vim.cmd.split()
+    local split_cmds = {
+      horizontal = "split",
+      vertical = "vsplit",
+      above = "aboveleft split",
+      below = "belowright split",
+      left = "aboveleft vsplit",
+      right = "belowright vsplit",
+    }
+    vim.cmd(split_cmds[cfg().split] or "split")
     vim.api.nvim_win_set_buf(0, buf)
   end
   vim.b[buf].devdocs = page

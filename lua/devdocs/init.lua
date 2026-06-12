@@ -29,6 +29,13 @@ M.config = {
   -- the converter wraps markdown prose to it at :DevdocsUpdate time (code
   -- fences, tables, and headings are never wrapped).
   width = 80,
+  -- Where the doc-page window opens, relative to the current window:
+  --   "above" | "below"          horizontal split
+  --   "left"  | "right"          vertical split
+  --   "horizontal" | "vertical"  plain split/vsplit (obeys 'splitbelow' /
+  --                              'splitright')
+  -- Following references reuses the page's window either way.
+  split = "horizontal",
   -- name -> docset definition. slug is the devdocs.io document slug
   -- (https://devdocs.io/docs.json); lang is the default code-fence language
   -- used during conversion; prefixes are tried for unqualified gK lookups.

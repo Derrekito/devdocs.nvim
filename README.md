@@ -140,6 +140,9 @@ require("devdocs").setup({
   data_dir = vim.fn.stdpath("data") .. "/devdocs",
   viewer = "markdown", -- or "man" (see Viewers above)
   width = 80,          -- man-viewer typeset width (clamped to the window)
+  split = "horizontal", -- "above"|"below"|"left"|"right" place relative to the
+                        -- current window; "horizontal"|"vertical" obey
+                        -- 'splitbelow'/'splitright'
   notes_dirs = { "<plugin>/notes" }, -- note sources; first entry is writable
   docsets = {
     cpp    = { slug = "cpp",         lang = "cpp", prefixes = { "std::" } },

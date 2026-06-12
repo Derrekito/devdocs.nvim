@@ -164,6 +164,33 @@ describe("devdocs", function()
     vim.cmd.close()
   end)
 
+  it("split option controls direction and placement of the page window", function()
+    local d = reload()
+    d.setup({ data_dir = make_fixture(), split = "vertical" })
+
+    local cases = {
+      { split = "vertical",   layout = "row", pos = nil },
+      { split = "horizontal", layout = "col", pos = nil },
+      { split = "right",      layout = "row", pos = 2 },
+      { split = "left",       layout = "row", pos = 1 },
+      { split = "below",      layout = "col", pos = 2 },
+      { split = "above",      layout = "col", pos = 1 },
+    }
+    for _, case in ipairs(cases) do
+      require("devdocs").setup({ split = case.split })
+      d.open("std::foo", "cpp")
+      local layout = vim.fn.winlayout()
+      assert.equals(case.layout, layout[1], case.split .. ": layout kind")
+      if case.pos then
+        local leaf = layout[2][case.pos]
+        assert.equals("leaf", leaf[1])
+        assert.equals(vim.api.nvim_get_current_win(), leaf[2],
+          case.split .. ": page window in position " .. case.pos)
+      end
+      vim.cmd.close()
+    end
+  end)
+
   it("viewer='man' shows the page through :Man machinery", function()
     local d = reload()
     d.setup({ data_dir = make_fixture(), viewer = "man" })
