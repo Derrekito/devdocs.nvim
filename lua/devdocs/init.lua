@@ -25,8 +25,9 @@ M.config = {
   --             through nvim's :Man machinery (troff typesetting, gO TOC).
   --             Falls back to markdown if pandoc/man are unavailable.
   viewer = "markdown",
-  -- Typeset column width for the man viewer (clamped to the window; the
-  -- markdown viewer wraps at window width by design).
+  -- Column width: the man viewer typesets at it (clamped to the window) and
+  -- the converter wraps markdown prose to it at :DevdocsUpdate time (code
+  -- fences, tables, and headings are never wrapped).
   width = 80,
   -- name -> docset definition. slug is the devdocs.io document slug
   -- (https://devdocs.io/docs.json); lang is the default code-fence language

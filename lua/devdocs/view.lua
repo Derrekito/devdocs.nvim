@@ -332,6 +332,11 @@ function M.show(docset, name, path, push)
   local buf = vim.api.nvim_create_buf(false, true) -- scratch, unlisted
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.api.nvim_buf_set_name(buf, "devdocs://" .. docset .. "/" .. name)
+  -- Regular buftype, not nofile: renderers special-case nofile as "LSP hover
+  -- float" and pad block-width backgrounds with NormalFloat, which bleeds a
+  -- float-colored band to the window edge in a normal split.
+  vim.bo[buf].buftype = ""
+  vim.bo[buf].modified = false
   vim.bo[buf].modifiable = false
   vim.bo[buf].bufhidden = "wipe"
 
@@ -341,8 +346,10 @@ function M.show(docset, name, path, push)
   -- windows showing the buffer — firing it while hidden leaves the page
   -- unrendered (attached but never painted).
   vim.bo[buf].filetype = "markdown"
-  vim.wo.wrap = true
-  vim.wo.linebreak = true
+  -- Prose is hard-wrapped at config.width by the converter, so display
+  -- wrapping is unnecessary — and renderers' block-width code backgrounds
+  -- bleed to the window edge under 'wrap'.
+  vim.wo.wrap = false
   vim.wo.conceallevel = 2
   map_page_keys(buf, docset)
 

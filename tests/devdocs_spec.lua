@@ -57,6 +57,10 @@ describe("devdocs", function()
     assert.equals("devdocs://cpp/std::foo", vim.api.nvim_buf_get_name(buf))
     assert.equals("markdown", vim.bo[buf].filetype)
     assert.is_false(vim.bo[buf].modifiable)
+    -- regular buftype: renderers pad nofile buffers with NormalFloat (an LSP
+    -- hover heuristic), bleeding a float-colored band in normal splits
+    assert.equals("", vim.bo[buf].buftype)
+    assert.is_false(vim.bo[buf].modified)
     local first = vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1]
     assert.equals("# std::foo", first)
     vim.cmd.close()
@@ -302,6 +306,31 @@ describe("LSP candidate resolution", function()
     d._lsp_candidates(vim.api.nvim_get_current_buf(), function(c) got = c end)
     vim.wait(500, function() return got ~= nil end, 50)
     assert.same({}, got)
+  end)
+end)
+
+describe("convert.py wrapping", function()
+  it("wraps prose at --width but never code fences", function()
+    local long = string.rep("lorem ipsum dolor ", 12) -- ~200 chars
+    local code = "int a_very_long_declaration_line_that_must_stay_intact_no_matter_what(void);"
+    local html = "<html><body><h1>t</h1><p>" .. long .. "</p><pre>" .. code .. "</pre>"
+      .. "<ul><li>" .. long .. "</li></ul></body></html>"
+    local dir = vim.fn.tempname()
+    write_file(dir .. "/pages/w.html", html)
+    local out = vim.fn.system({ "python", vim.fn.getcwd() .. "/scripts/convert.py", dir, "w", "--width=80" })
+    assert.equals(0, vim.v.shell_error, out)
+    local in_fence = false
+    for line in out:gmatch("[^\n]+") do
+      if line:match("^```") then
+        in_fence = not in_fence
+      elseif in_fence then
+        assert.is_truthy(line:find(code, 1, true), "fence content intact")
+      else
+        assert.is_true(#line <= 80, "prose wrapped: " .. line)
+      end
+    end
+    assert.is_truthy(out:match("\n%- lorem"), "list item present")
+    assert.is_truthy(out:match("\n  %a"), "list continuation has hanging indent")
   end)
 end)
 

@@ -34,11 +34,13 @@ Usage:
 import re
 import sys
 import pathlib
+import textwrap
 from bs4 import BeautifulSoup
 from bs4.element import NavigableString, Tag
 
 BREAK = "\x00"  # sentinel: forced line break inside a coalesced paragraph
 LANG = "cpp"    # default fence language; overridden by --lang=
+WIDTH = 80      # prose wrap column; overridden by --width= (0 disables)
 
 INLINE_TAGS = {
     "span", "code", "a", "b", "strong", "i", "em", "sub", "sup",
@@ -84,13 +86,21 @@ def squash(text: str) -> str:
     return re.sub(r"\s+", " ", text.replace(BREAK, " ")).strip()
 
 
+def wrap(line: str, indent: str = "") -> list[str]:
+    """Wrap one prose line at WIDTH with a hanging indent (0 = no wrap)."""
+    if not WIDTH or len(line) <= WIDTH:
+        return [line]
+    return textwrap.wrap(line, WIDTH, subsequent_indent=indent,
+                         break_long_words=False, break_on_hyphens=False)
+
+
 def para_lines(text: str) -> list[str]:
-    """Inline text -> paragraph lines, honoring break sentinels."""
+    """Inline text -> wrapped paragraph lines, honoring break sentinels."""
     out = []
     for chunk in text.split(BREAK):
         chunk = re.sub(r"\s+", " ", chunk).strip()
         if chunk:
-            out.append(chunk)
+            out.extend(wrap(chunk))
     return out
 
 # ── block rendering ──────────────────────────────────────────────────────────
@@ -152,11 +162,11 @@ def term_desc_table(table) -> list[str]:
         if not term and not desc:
             continue
         if term and desc:
-            out.append("- **" + term + "** — " + desc)
+            out.extend(wrap("- **" + term + "** — " + desc, "  "))
         elif desc:
-            out.append("- " + desc)
+            out.extend(wrap("- " + desc, "  "))
         else:
-            out.append("- **" + term + "**")
+            out.extend(wrap("- **" + term + "**", "  "))
     out.append("")
     return out
 
@@ -173,13 +183,16 @@ def sdsc_table(table) -> list[str]:
 
 
 def generic_table(table) -> list[str]:
-    """Fallback: each row as 'cell | cell | ...' text."""
+    """Fallback: each row as 'cell | cell | ...' text, wrapped with a deep
+    hanging indent. Over-width lines are worse than ugly: under 'nowrap' they
+    force horizontal scrolling, and markdown renderers disable themselves
+    entirely while a window is scrolled sideways (leftcol > 0)."""
     out = []
     for tr in table.find_all("tr"):
         cells = [squash(inline(c)) for c in tr.find_all(["td", "th"])]
         cells = [c for c in cells if c]
         if cells:
-            out.append("  " + " | ".join(cells))
+            out.extend(wrap("  " + " | ".join(cells), "      "))
     out.append("")
     return out
 
@@ -236,7 +249,7 @@ def blocks(el) -> list[str]:
         elif name in ("ul", "ol"):
             marker = "-" if name == "ul" else "1."
             for li in c.find_all("li", recursive=False):
-                out.append(marker + " " + squash(inline(li)))
+                out.extend(wrap(marker + " " + squash(inline(li)), " " * (len(marker) + 1)))
             out.append("")
         elif name == "pre":
             out.extend(code_fence(c.get_text()))
@@ -256,7 +269,7 @@ def blocks(el) -> list[str]:
         elif name == "div":
             if "t-li1" in cls or "t-li2" in cls:
                 indent = "   " if "t-li2" in cls else ""
-                out.append(indent + squash(inline(c)))
+                out.extend(wrap(indent + squash(inline(c)), indent + "   "))
             elif "source-cpp" in cls or ("cpp" in cls and c.find("pre")):
                 out.extend(code_fence(c.get_text()))
             elif "source-text" in cls or ("text" in cls and c.find("pre")):
@@ -302,11 +315,13 @@ def convert(html: str) -> str:
 
 
 def main():
-    global LANG
+    global LANG, WIDTH
     args = []
     for a in sys.argv[1:]:
         if a.startswith("--lang="):
             LANG = a.split("=", 1)[1]
+        elif a.startswith("--width="):
+            WIDTH = int(a.split("=", 1)[1])
         else:
             args.append(a)
 

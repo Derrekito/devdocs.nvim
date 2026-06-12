@@ -92,12 +92,12 @@ for path, html in db.items():
     f.write_text(html)
 print("pages:", len(db))
 PY
-python %s %s --lang=%s
+python %s %s --lang=%s --width=%d
 rm -f "$tmp"
 ]]):format(
     vim.fn.shellescape(r), ds.slug, vim.fn.shellescape(r), ds.slug, r,
     vim.fn.shellescape(M.plugin_root() .. "/scripts/convert.py"),
-    vim.fn.shellescape(r), ds.lang or "text")
+    vim.fn.shellescape(r), ds.lang or "text", cfg().width or 80)
   local out = vim.fn.system({ "sh", "-c", "tmp=$(mktemp); export tmp; " .. script })
   M.invalidate(name)
   local ok = vim.v.shell_error == 0
