@@ -49,6 +49,26 @@ describe("devdocs", function()
     assert.is_nil(d._find_entry("cpp", "nonexistent"))
   end)
 
+  it("suffix lookup resolves scope-stripped type names to the shortest entry", function()
+    local d = reload()
+    local dir = vim.fn.tempname()
+    write_file(dir .. "/cpp/index.json", vim.json.encode({ entries = {
+      { name = "std::filesystem::directory_entry",           path = "fs/dir_entry", type = "F" },
+      { name = "std::filesystem::directory_entry::path",     path = "fs/dir_entry/path", type = "F" },
+      { name = "std::pmr::vector",                           path = "container/pmr_vector", type = "C" },
+      { name = "std::vector",                                path = "container/vector", type = "C" },
+    } }))
+    d.setup({ data_dir = dir })
+    local data = require("devdocs.data")
+    -- clangd hover printed 'directory_entry' (scope-visible, unqualified)
+    assert.equals("fs/dir_entry", data.find_entry_suffix("cpp", "directory_entry").path)
+    -- ambiguous suffixes pick the shortest (most general) name
+    assert.equals("container/vector", data.find_entry_suffix("cpp", "vector").path)
+    -- qualified names and misses are left alone
+    assert.is_nil(data.find_entry_suffix("cpp", "std::vector"))
+    assert.is_nil(data.find_entry_suffix("cpp", "nonexistent"))
+  end)
+
   it("open() shows the page in a markdown scratch buffer", function()
     local d = reload()
     d.setup({ data_dir = make_fixture() })
@@ -279,6 +299,16 @@ describe("LSP candidate resolution", function()
     local d = reload()
     local c = d._hover_candidates(HOVER)
     assert.same({ "std::ostringstream", "basic_ostringstream", "std::basic_ostringstream" }, c)
+  end)
+
+  it("extracts the deduced type from keyword hovers (auto)", function()
+    local d = reload()
+    -- captured from real clangd: hover on 'auto' in a directory_iterator loop
+    local AUTO_HOVER = "### type-alias `auto`\n\n---\nThe value type used by directory iterators\n\n@headerfile filesystem \n\n@since C++17\n\n---\n```cpp\ndirectory_entry\n```"
+    local c = d._hover_candidates(AUTO_HOVER)
+    assert.same({ "directory_entry", "std::directory_entry" }, c)
+    -- declaration-shaped fences must not produce candidates
+    assert.same({}, d._hover_candidates("### function `f`\n\n---\n```cpp\nvoid f(int x)\n```"))
   end)
 
   it("builds qualified member candidates from symbolInfo", function()

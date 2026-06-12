@@ -192,8 +192,11 @@ function M.lookup_cword()
 
   lsp.candidates(vim.api.nvim_get_current_buf(), function(candidates)
     for _, c in ipairs(candidates) do
-      if data.find_entry(docset, c) then
-        M.open(c, docset)
+      -- exact first; then namespace-suffix matching, since clangd hover
+      -- prints types as visible from the cursor's scope (often unqualified)
+      local e = data.find_entry(docset, c) or data.find_entry_suffix(docset, c)
+      if e then
+        view.show(docset, e.name, e.path)
         return
       end
     end

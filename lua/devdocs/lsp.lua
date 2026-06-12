@@ -23,9 +23,28 @@ function M.normalize_type(t)
   return t
 end
 
--- Candidates from a clangd hover markdown blob ("Type: `X (aka Y)`").
+-- Candidates from a clangd hover markdown blob. Two shapes:
+--   variables:        "Type: `X (aka Y)`"
+--   keywords (auto):  no Type line; the deduced type sits alone in the
+--                     trailing code fence, e.g. ```cpp\ndirectory_entry\n```
 function M.hover_candidates(markdown)
-  local ty = type(markdown) == "string" and markdown:match("Type: `([^`\n]+)`")
+  if type(markdown) ~= "string" then return {} end
+  local ty = markdown:match("Type: `([^`\n]+)`")
+  if not ty then
+    local fence = markdown:match("```%w*\n(.-)\n?```%s*$")
+    if fence then
+      local lines = {}
+      for line in fence:gmatch("[^\n]+") do
+        if not line:match("^%s*//") and line:match("%S") then
+          lines[#lines + 1] = line
+        end
+      end
+      -- only trust a lone line that looks like a type, not a declaration
+      if #lines == 1 and not lines[1]:find("(", 1, true) then
+        ty = lines[1]
+      end
+    end
+  end
   if not ty then return {} end
   local primary = ty:match("^(.-)%s*%(aka%s") or ty
   local aka = ty:match("%(aka%s+(.*)%)%s*$")

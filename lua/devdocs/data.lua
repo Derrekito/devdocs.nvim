@@ -72,6 +72,26 @@ function M.find_entry(docset, word)
   return nil
 end
 
+-- Last-resort lookup for LSP-derived type names: clangd hover prints types
+-- as visible from the cursor's scope, often without their namespace
+-- ('directory_entry' for std::filesystem::directory_entry). Match entries
+-- ending in '::word' and pick the shortest name (the most general page).
+-- Not used for raw cursor words — a variable named 'size' must not resolve
+-- to std::vector::size.
+function M.find_entry_suffix(docset, word)
+  if word:find("::", 1, true) then return nil end
+  local idx = M.load_index(docset)
+  if not idx then return nil end
+  local suffix = "::" .. word
+  local best
+  for _, e in ipairs(idx.entries) do
+    if e.name:sub(-#suffix) == suffix then
+      if not best or #e.name < #best.name then best = e end
+    end
+  end
+  return best
+end
+
 -- ── download + convert ──────────────────────────────────────────────────────
 
 local function update_one(name)
