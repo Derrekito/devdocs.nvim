@@ -27,6 +27,9 @@ end
 -- Per-window stack of visited pages, for man-style <C-T> back-navigation.
 local history = {}
 
+-- Defined in the reference-links section below; mapped in map_page_keys.
+local jump_link
+
 local help_hinted = false
 
 -- less(1)-style help screen, so the pager feels like terminal man. Paging
@@ -40,7 +43,8 @@ local HELP = {
   "  C-d / C-u      half page forward / back    ",
   "  /  ?  n  N     search forward / back       ",
   "  gg / G         top / bottom                ",
-  "  K  C-]  gK     follow reference at cursor  ",
+  "  K  CR  C-]     follow reference at cursor  ",
+  "  Tab / S-Tab    next / previous link        ",
   "  ]c / [c        next / previous code block  ",
   "  gy             yank code block at cursor   ",
   "  C-t            previous page               ",
@@ -123,9 +127,11 @@ local function map_page_keys(buf, docset)
     local word = M.capture_word(docset)
     if word ~= "" then require("devdocs").open(word, docset) end
   end
-  for _, lhs in ipairs({ "K", "gK", "<C-]>" }) do
+  for _, lhs in ipairs({ "K", "gK", "<C-]>", "<CR>" }) do
     map(lhs, follow, "follow reference")
   end
+  map("<Tab>", function() jump_link(1) end, "next link")
+  map("<S-Tab>", function() jump_link(-1) end, "previous link")
 
   -- code-example navigation: doc pages are never diff buffers, so ]c/[c are
   -- free to mean "next/previous code block" here
@@ -231,6 +237,80 @@ local function claim_buf_name(buf, name)
     end
   end
   pcall(vim.api.nvim_buf_set_name, buf, name)
+end
+
+-- ── reference links ─────────────────────────────────────────────────────────
+-- Words in `backtick` or **bold** spans that resolve to an index entry are
+-- links: highlighted (DevdocsLink, default Underlined), Tab/S-Tab hop
+-- between them, K/<CR> follow. This turns See-also sections and header
+-- inventory pages into navigable tables of contents. Markdown viewer only —
+-- troff output has no spans left to recognize.
+
+local link_ns = vim.api.nvim_create_namespace("devdocs.links")
+
+local function linkify(buf, docset)
+  vim.api.nvim_set_hl(0, "DevdocsLink", { default = true, link = "Underlined" })
+  local m = data.entry_map(docset)
+  if not m then return end
+  local prefixes = cfg().docsets[docset].prefixes or {}
+  local function resolves(word)
+    if m[word] or m[word .. "()"] then return true end
+    for _, p in ipairs(prefixes) do
+      if m[p .. word] or m[p .. word .. "()"] then return true end
+    end
+    return false
+  end
+  local in_fence = false
+  for row, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
+    if line:match("^```") then
+      in_fence = not in_fence
+    elseif not in_fence then
+      -- backtick spans, and bold spans that aren't just wrapping backticks
+      for _, pat in ipairs({ "()`([^`%s]+)`()", "()%*%*([^%*`%s]+)%*%*()" }) do
+        for s, word, e in line:gmatch(pat) do
+          if resolves(word) then
+            vim.api.nvim_buf_set_extmark(buf, link_ns, row - 1, s - 1, {
+              end_col = e - 1,
+              hl_group = "DevdocsLink",
+              priority = 110,
+            })
+          end
+        end
+      end
+    end
+  end
+end
+
+-- Tab/S-Tab: cursor to the next/previous link, wrapping around the page.
+function jump_link(dir)
+  local buf = vim.api.nvim_get_current_buf()
+  local marks = vim.api.nvim_buf_get_extmarks(buf, link_ns, 0, -1, {})
+  if #marks == 0 then
+    vim.notify("devdocs: no links on this page", vim.log.levels.INFO)
+    return
+  end
+  local cur = vim.api.nvim_win_get_cursor(0)
+  local row, col = cur[1] - 1, cur[2]
+  local target
+  if dir > 0 then
+    for _, mk in ipairs(marks) do
+      if mk[2] > row or (mk[2] == row and mk[3] > col) then
+        target = mk
+        break
+      end
+    end
+    target = target or marks[1] -- wrap to top
+  else
+    for i = #marks, 1, -1 do
+      local mk = marks[i]
+      if mk[2] < row or (mk[2] == row and mk[3] < col) then
+        target = mk
+        break
+      end
+    end
+    target = target or marks[#marks] -- wrap to bottom
+  end
+  vim.api.nvim_win_set_cursor(0, { target[2] + 1, target[3] })
 end
 
 -- ── code highlighting in man pages ──────────────────────────────────────────
@@ -484,6 +564,7 @@ function M.show(docset, name, path, push)
   -- bleed to the window edge under 'wrap'.
   vim.wo.wrap = false
   vim.wo.conceallevel = 2
+  linkify(buf, docset)
   map_page_keys(buf, docset)
 
   -- Single-page docsets (e.g. the Lua manual) address entries by anchor;

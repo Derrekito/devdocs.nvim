@@ -56,7 +56,8 @@ Ctrl-chorded — so normal editor motions stay untouched:
 |---|---|
 | `<C-f>` / `<C-b>` | Page forward / back |
 | `<C-d>` / `<C-u>` | Half page forward / back |
-| `K` / `<C-]>` / `gK` | Follow the reference under the cursor (same docset, replaces in-window) |
+| `K` / `<CR>` / `<C-]>` / `gK` | Follow the reference under the cursor (same docset, replaces in-window) |
+| `<Tab>` / `<S-Tab>` | Jump to the next / previous link (wraps) |
 | `]c` / `[c` | Jump to the next / previous code block |
 | `gy` | Yank the code block under the cursor (unnamed register + clipboard) |
 | `<C-T>` | Back to the previous page |
@@ -65,10 +66,16 @@ Ctrl-chorded — so normal editor motions stay untouched:
 | `q` / `:q` | Back out one page; closes the window only at the top of the stack |
 | `Q` / `:q!` | Close the page window immediately |
 
-Following references (`K`/`gK`/`<C-]>`) inside a page is a **nested
-lookup**: each followed entry stacks on the previous one, and each
-`q`/`:q` unwinds one level — you land back on the entry you came from,
-and only quitting the last page closes the window.
+In the markdown viewer, any `` `name` `` or **name** span that resolves
+to an index entry is a **link**: highlighted (`DevdocsLink`, default
+`Underlined`), `<Tab>`-hoppable, followed with `<CR>`/`K`. See-also
+sections and header pages (`<algorithm>`, `<iostream>`) thereby act as
+tables of contents into the rest of the manual.
+
+Following references (`K`/`<CR>`/`gK`/`<C-]>`) inside a page is a
+**nested lookup**: each followed entry stacks on the previous one, and
+each `q`/`:q` unwinds one level — you land back on the entry you came
+from, and only quitting the last page closes the window.
 
 `]c`/`[c`/`gy` work in both viewers — the man viewer remembers where each
 fenced block landed after typesetting, and `gy` always yanks the original

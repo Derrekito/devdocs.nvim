@@ -5,6 +5,7 @@
 local M = {}
 
 local index_cache = {}
+local map_cache = {}
 
 local function cfg()
   return require("devdocs").config
@@ -35,9 +36,24 @@ end
 function M.invalidate(name)
   if name then
     index_cache[name] = nil
+    map_cache[name] = nil
   else
     index_cache = {}
+    map_cache = {}
   end
+end
+
+-- name -> entry lookup table (first entry wins on duplicates), cached.
+function M.entry_map(name)
+  if map_cache[name] then return map_cache[name] end
+  local idx = M.load_index(name)
+  if not idx then return nil end
+  local m = {}
+  for _, e in ipairs(idx.entries) do
+    if not m[e.name] then m[e.name] = e end
+  end
+  map_cache[name] = m
+  return m
 end
 
 function M.load_index(name)
@@ -65,21 +81,15 @@ end
 -- words (e.g. vector -> std::vector) and the "name()" form many docsets use
 -- (string.format(), add_library(), str.split()).
 function M.find_entry(docset, word)
-  local idx = M.load_index(docset)
-  if not idx then return nil end
+  local m = M.entry_map(docset)
+  if not m then return nil end
   local stems = { word }
   for _, p in ipairs(cfg().docsets[docset].prefixes or {}) do
     table.insert(stems, p .. word)
   end
-  local candidates = {}
   for _, s in ipairs(stems) do
-    table.insert(candidates, s)
-    table.insert(candidates, s .. "()")
-  end
-  for _, candidate in ipairs(candidates) do
-    for _, e in ipairs(idx.entries) do
-      if e.name == candidate then return e end
-    end
+    local e = m[s] or m[s .. "()"]
+    if e then return e end
   end
   return nil
 end

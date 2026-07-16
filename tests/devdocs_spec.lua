@@ -479,6 +479,68 @@ describe("owned manuals", function()
   end)
 end)
 
+describe("reference links", function()
+  local function link_fixture()
+    local d = reload()
+    local dir = make_fixture()
+    write_file(dir .. "/cpp/pages-md/utility/bar.md", table.concat({
+      "# std::bar",
+      "",
+      "See `std::foo` and the unqualified **foo** form; `nonexistent`",
+      "and `bar_local_var` resolve to nothing.",
+      "",
+      "```cpp",
+      "std::foo inside_a_fence;   // fences are never linkified",
+      "```",
+      "",
+      "### See also",
+      "",
+      "- **std::foo** — the thing itself",
+      "",
+    }, "\n"))
+    write_file(dir .. "/cpp/index.json", vim.json.encode({ entries = {
+      { name = "std::foo", path = "utility/foo", type = "U" },
+      { name = "std::bar", path = "utility/bar", type = "U" },
+    } }))
+    d.setup({ data_dir = dir, docsets = { cpp = { prefixes = { "std::" } } } })
+    return d
+  end
+
+  it("index-resolvable spans get link extmarks; fences and misses don't", function()
+    local d = link_fixture()
+    d.open("std::bar", "cpp")
+    local ns = vim.api.nvim_get_namespaces()["devdocs.links"]
+    local marks = vim.api.nvim_buf_get_extmarks(0, ns, 0, -1, { details = true })
+    assert.equals(3, #marks, "std::foo, **foo**, and the See-also entry")
+    for _, mk in ipairs(marks) do
+      assert.equals("DevdocsLink", mk[4].hl_group)
+    end
+    vim.cmd.close()
+  end)
+
+  it("Tab hops between links (wrapping) and <CR> follows", function()
+    local d = link_fixture()
+    d.open("std::bar", "cpp")
+    local function buf_map(lhs)
+      for _, mk in ipairs(vim.api.nvim_buf_get_keymap(0, "n")) do
+        if mk.lhs == lhs then return mk end
+      end
+    end
+    vim.api.nvim_win_set_cursor(0, { 1, 0 })
+    buf_map("<Tab>").callback()
+    local first = vim.api.nvim_win_get_cursor(0)
+    assert.equals(3, first[1], "first link is on the See line")
+    buf_map("<Tab>").callback()
+    buf_map("<Tab>").callback()
+    buf_map("<Tab>").callback() -- past the last link: wraps to the first
+    assert.same(first, vim.api.nvim_win_get_cursor(0), "Tab wraps around")
+
+    buf_map("<CR>").callback()
+    assert.equals("devdocs://cpp/std::foo", vim.api.nvim_buf_get_name(0), "<CR> followed the link")
+    vim.cmd.close()
+  end)
+end)
+
 describe("code examples", function()
   -- a page with two code blocks, plus an annotated notes example
   local function setup_with_examples()
