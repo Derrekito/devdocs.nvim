@@ -44,6 +44,23 @@ tasks.push({1, "a"});
 std::cout << tasks.top().name << '\n';   // a (lowest priority number first)
 ```
 
+### Building a heap from existing data
+
+The iterator-pair constructor heapifies a whole range in one O(n)
+call, instead of pushing elements one at a time at O(log n) each:
+
+```cpp
+#include <vector>
+
+std::vector<int> v{3, 1, 4, 1, 5};
+std::priority_queue<int> pq(v.begin(), v.end());
+std::cout << pq.top() << '\n';   // 5
+```
+
+```text
+5
+```
+
 ### Gotchas
 
 - The comparator's sense is **inverted** from what feels natural:

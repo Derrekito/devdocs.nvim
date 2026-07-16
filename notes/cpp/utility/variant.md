@@ -34,6 +34,46 @@ if (auto* p = std::get_if<double>(&v))
     std::cout << "double: " << *p << '\n';
 ```
 
+### The `overloaded{}` visitor idiom
+
+`std::visit` needs one callable that handles every alternative. Instead
+of a chain of `if constexpr`, combine several lambdas — one per type —
+into one overload set with a small helper struct. The struct itself is
+plain C++17; what makes the *construction* terse is class template
+argument deduction (CTAD) picking up the deduction guide implied by the
+aggregate's constructors, which is a C++17 feature too, so the whole
+idiom works as-is under `-std=c++17`:
+
+```cpp
+#include <iostream>
+#include <string>
+#include <variant>
+
+template <class... Ts>
+struct overloaded : Ts... { using Ts::operator()...; };
+template <class... Ts>
+overloaded(Ts...) -> overloaded<Ts...>;   // deduction guide
+
+int main()
+{
+    std::variant<int, double, std::string> v = 3.14;
+
+    std::visit(overloaded{
+        [](int i)                 { std::cout << "int " << i << '\n'; },
+        [](double d)               { std::cout << "dbl " << d << '\n'; },
+        [](const std::string& s)  { std::cout << "str " << s << '\n'; },
+    }, v);
+}
+```
+
+```text
+dbl 3.14
+```
+
+This scales far better than a generic lambda once each alternative
+needs different handling, and the compiler flags a missing case at
+the call to `visit` (not at some later use).
+
 ### Gotchas
 
 - `std::get<T>(v)` on the wrong alternative throws
@@ -43,3 +83,5 @@ if (auto* p = std::get_if<double>(&v))
   all.
 - `index()` gives the active alternative (0-based); a default-constructed
   variant holds its first alternative.
+- All of `variant`, `visit`, and the `overloaded{}` CTAD trick require
+  **C++17**; nothing here needs a newer standard.

@@ -57,6 +57,40 @@ std::array<int, 3> p{1, 2, 3};
 auto [x, y, z] = p;
 ```
 
+### Deducing the type and size (C++17 CTAD)
+
+Class template argument deduction lets you drop both template
+arguments when the initializer says everything: element type and
+count are inferred from the braced list.
+
+```cpp
+std::array a{1, 2, 3, 4};   // deduces std::array<int, 4>
+static_assert(std::is_same_v<decltype(a), std::array<int, 4>>);
+std::cout << a.size() << '\n';   // 4
+```
+
+```text
+4
+```
+
+### Wrapping a C array (C++20: `std::to_array`)
+
+`std::to_array` copies a raw array into a `std::array`, deducing type
+and size — handy for string literals and legacy C arrays without
+writing the template arguments by hand:
+
+```cpp c++20
+#include <array>
+
+auto a = std::to_array({1, 2, 3});   // std::array<int, 3>
+auto s = std::to_array("hi");        // std::array<char, 3>: 'h','i','\0'
+std::cout << a.size() << ' ' << s.size() << '\n';
+```
+
+```text
+3 3
+```
+
 ### Gotchas
 
 - The size is a compile-time constant baked into the type:

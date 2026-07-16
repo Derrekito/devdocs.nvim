@@ -154,10 +154,11 @@ def check_cpp_like(path, fences, lang, run_programs, expected_for):
                 if r.returncode != 0:
                     failures.append(Failure(path, fence, r.stderr))
                 else:
-                    pre, body = split_program(fence.code)
-                    top, rest = hoist(pre)
-                    ctx_top += top + rest
-                    ctx_body += body.splitlines()
+                    if std == default_std:  # pinned fences don't feed context
+                        pre, body = split_program(fence.code)
+                        top, rest = hoist(pre)
+                        ctx_top += top + rest
+                        ctx_body += body.splitlines()
                     if run_programs:
                         exe = tmp / f"ex{n}.out"
                         r = run(compiler + [str(src), "-o", str(exe)])
@@ -198,13 +199,17 @@ def check_cpp_like(path, fences, lang, run_programs, expected_for):
                     src.write_text("\n".join(lines) + "\n")
                     r = run(compiler + ["-fsyntax-only", str(src)])
                     if r.returncode == 0:
-                        ctx_top += top
-                        if kind == "cumulative":
-                            ctx_body += rest
-                        elif kind == "standalone":
-                            ctx_body = list(rest)  # fragment restarted context
-                        else:
-                            ctx_top += rest
+                        # a fence pinned to a non-default standard must not
+                        # feed the shared context — later default-std
+                        # fragments would inherit code they can't compile
+                        if std == default_std:
+                            ctx_top += top
+                            if kind == "cumulative":
+                                ctx_body += rest
+                            elif kind == "standalone":
+                                ctx_body = list(rest)  # restarted context
+                            else:
+                                ctx_top += rest
                         break
                     first_err = first_err or r.stderr
                 else:

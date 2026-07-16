@@ -20,7 +20,8 @@ int main()
 }
 ```
 
-Membership: `count` (0 or 1) or, in C++20, `contains`:
+Membership: `count` returns 0 or 1 (never more, since elements are
+unique):
 
 ```cpp
 if (s.count(4)) std::cout << "has 4\n";
@@ -34,6 +35,26 @@ std::set<int> s{10, 20, 30, 40, 50};
 for (auto it = s.lower_bound(20); it != s.upper_bound(40); ++it)
     std::cout << *it << ' ';              // 20 30 40
 std::cout << '\n';
+```
+
+### Checking membership (C++20: `contains`)
+
+`contains` says what it means and avoids the "count as a bool" idiom:
+
+```cpp c++20
+#include <iostream>
+#include <set>
+
+int main()
+{
+    std::set<int> s{1, 3, 4, 5, 9};
+    if (s.contains(4))
+        std::cout << "has 4\n";
+}
+```
+
+```text
+has 4
 ```
 
 ### Gotchas

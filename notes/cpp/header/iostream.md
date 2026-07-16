@@ -23,10 +23,10 @@ field:
 #include <iomanip>
 #include <iostream>
 
-std::cout << std::fixed << std::setprecision(2) << 3.14159 << '\n';  // 3.14
-std::cout << std::setw(8) << std::right << 42 << '\n';               // "      42"
-std::cout << std::boolalpha << (1 < 2) << '\n';                      // true
-std::cout << std::hex << 255 << '\n';                                // ff
+std::cout << std::fixed << std::setprecision(2) << 3.14159 << '\n'; // 3.14
+std::cout << std::setw(8) << std::right << 42 << '\n';        // "      42"
+std::cout << std::boolalpha << (1 < 2) << '\n';                     // true
+std::cout << std::hex << 255 << '\n';                                 // ff
 ```
 
 Reading: always test the stream — a failed extraction leaves the target
@@ -56,6 +56,59 @@ at):
 std::string line;
 while (std::getline(std::cin, line))
     std::cout << "line: " << line << '\n';
+```
+
+### Build a formatted string instead of printing it
+
+`std::ostringstream` (`<sstream>`) accepts the same `<<` chain and
+manipulators as `std::cout`, but collects the result into a string you
+can return, log, or pass on:
+
+```cpp
+#include <iomanip>
+#include <iostream>
+#include <sstream>
+#include <string>
+
+std::string format_price(double v)
+{
+    std::ostringstream out;
+    out << '$' << std::fixed << std::setprecision(2) << v;
+    return out.str();
+}
+
+int main()
+{
+    std::cout << format_price(3.5) << '\n';
+}
+```
+
+```text
+$3.50
+```
+
+### Format output with std::format (C++20)
+
+`std::format` (`<format>`) replaces most `<iomanip>` chains with a
+single Python-style format string — no stream state to reset between
+calls:
+
+```cpp c++20
+#include <format>
+#include <iostream>
+
+int main()
+{
+    std::cout << std::format("{} is {:.2f}\n", "pi", 3.14159);
+    std::cout << std::format("{:>8}\n", 42);   // right-align, width 8
+    std::cout << std::format("{:#x}\n", 255);  // hex with 0x prefix
+}
+```
+
+```text
+pi is 3.14
+      42
+0xff
 ```
 
 ### Gotchas

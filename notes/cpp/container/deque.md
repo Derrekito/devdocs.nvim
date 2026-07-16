@@ -33,6 +33,38 @@ int next = q.front();
 q.pop_front();            // dequeued 10
 ```
 
+Prefer `emplace_front`/`emplace_back` (C++11) to construct in place
+instead of building a temporary and pushing it:
+
+```cpp
+std::deque<std::pair<int, int>> pts;
+pts.emplace_back(1, 2);
+pts.emplace_front(0, 0);
+```
+
+### Removing by value (C++20: `std::erase`/`std::erase_if`)
+
+Erasing from the middle of a deque is O(n) either way, but the free
+functions skip the erase–remove dance:
+
+```cpp c++20
+#include <deque>
+#include <iostream>
+
+int main()
+{
+    std::deque<int> d{1, 2, 3, 4, 5, 6};
+    std::erase_if(d, [](int x) { return x % 2 == 0; });   // d == {1, 3, 5}
+
+    for (int x : d) std::cout << x << ' ';
+    std::cout << '\n';
+}
+```
+
+```text
+1 3 5 
+```
+
 ### Gotchas
 
 - Elements are **not** contiguous (a deque is a sequence of chunks), so

@@ -34,6 +34,25 @@ std::vector<int> v{1, 2, 3, 4, 5};
 std::rotate(v.begin(), v.end() - 2, v.end());   // 4 5 1 2 3
 ```
 
+### Rotate a container directly with C++20 ranges
+
+`std::ranges::rotate` (C++20) takes the container instead of a
+begin/end pair, so a left rotation reads as one call:
+
+```cpp c++20
+#include <algorithm>
+#include <iostream>
+#include <vector>
+
+int main()
+{
+    std::vector<int> v{1, 2, 3, 4, 5};
+    std::ranges::rotate(v, v.begin() + 2);
+    for (int x : v) std::cout << x << ' ';   // 3 4 5 1 2
+    std::cout << '\n';
+}
+```
+
 ### Gotchas
 
 - `middle` must lie within `[first, last]`; it's the element that ends up
@@ -43,3 +62,7 @@ std::rotate(v.begin(), v.end() - 2, v.end());   // 4 5 1 2 3
   a separate range and keep the original.
 - Rotating an empty range or with `middle == first`/`middle == last` is a
   well-defined no-op — no need to special-case it.
+- The iterator-returning form used throughout this page is C++11 on;
+  before that, `std::rotate` returned `void`. Irrelevant at the C++17
+  default this page assumes, but worth knowing if you ever build for an
+  older standard.

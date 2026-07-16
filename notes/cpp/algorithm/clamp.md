@@ -24,11 +24,44 @@ int volume = 130;
 volume = std::clamp(volume, 0, 100);   // 100
 ```
 
-Works for any comparable type — floats, for instance (a comparator
-overload also exists to clamp by a custom ordering):
+Works for any comparable type — floats, for instance:
 
 ```cpp
 double x = std::clamp(1.5, 0.0, 1.0);  // 1.0
+```
+
+### Clamp by a custom ordering
+
+A comparator overload, also C++17, clamps by any `Compare` instead of
+`operator<` — e.g. clamping a string by its length rather than its
+lexical value:
+
+```cpp
+#include <string>
+
+auto by_length = [](const std::string& a, const std::string& b){
+    return a.size() < b.size();
+};
+std::string clamped = std::clamp(std::string("hi"),
+                                  std::string("abc"),
+                                  std::string("abcdefgh"),
+                                  by_length);   // "abc" (too short)
+```
+
+### NaN inputs make the result unspecified
+
+`std::clamp` compares with `<`, and every comparison against NaN is
+`false`. If `v`, `lo`, or `hi` is NaN, which branch runs — and
+therefore what's returned — is unspecified. Don't rely on NaN being
+clamped to a bound, or on it passing through untouched:
+
+```cpp
+#include <cmath>
+#include <limits>
+
+double nan = std::numeric_limits<double>::quiet_NaN();
+double r = std::clamp(nan, 0.0, 1.0);   // unspecified: don't rely on a
+                                         // particular result here
 ```
 
 ### Gotchas

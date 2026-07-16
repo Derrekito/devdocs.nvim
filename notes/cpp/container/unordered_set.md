@@ -14,7 +14,7 @@ int main()
     auto [it, inserted] = seen.insert(2);   // already present
     std::cout << "inserted 2: " << std::boolalpha << inserted << '\n';   // false
 
-    if (seen.count(3)) std::cout << "has 3\n";   // or seen.contains(3) in C++20
+    if (seen.count(3)) std::cout << "has 3\n";
 }
 ```
 
@@ -36,6 +36,26 @@ for (const auto& s : input)
 ```cpp
 std::unordered_set<int> s;
 s.reserve(10000);
+```
+
+### Checking membership (C++20: `contains`)
+
+`contains` reads better than `count(...)` used as a bool:
+
+```cpp c++20
+#include <iostream>
+#include <unordered_set>
+
+int main()
+{
+    std::unordered_set<int> seen{1, 2, 3};
+    if (seen.contains(3))
+        std::cout << "has 3\n";
+}
+```
+
+```text
+has 3
 ```
 
 ### Gotchas

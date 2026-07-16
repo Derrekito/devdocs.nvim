@@ -37,6 +37,38 @@ std::transform(a.begin(), a.end(), b.begin(), sum.begin(),
                [](int x, int y){ return x + y; });   // 11 22 33
 ```
 
+### Transform a member without a `.field` lambda (C++20: ranges)
+
+`std::ranges::transform` (`<algorithm>`) takes the range directly and
+accepts a **projection**, applied before the operation — useful for
+mapping one field of a struct without writing it into the lambda body:
+
+```cpp c++20
+#include <algorithm>
+#include <iostream>
+#include <string>
+#include <vector>
+
+struct Person { std::string name; int age; };
+
+int main()
+{
+    std::vector<Person> people{
+        {"alice", 30}, {"bob", 25}, {"carol", 22}};
+    std::vector<int> next_birthday(people.size());
+
+    std::ranges::transform(people, next_birthday.begin(),
+                           [](int age){ return age + 1; },
+                           &Person::age);
+    for (int a : next_birthday) std::cout << a << ' ';
+    std::cout << '\n';
+}
+```
+
+```text
+31 26 23
+```
+
 ### Gotchas
 
 - The destination must have room; writing into an empty vector is UB.

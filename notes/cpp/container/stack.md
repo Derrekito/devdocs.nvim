@@ -41,6 +41,25 @@ bool balanced(const std::string& in)
 }
 ```
 
+### Choosing the underlying container
+
+`std::stack` defaults to `std::deque`, but any container with
+`back`/`push_back`/`pop_back` works — `std::vector` is a common swap
+when you don't need the double-ended growth a deque offers:
+
+```cpp
+#include <vector>
+
+std::stack<int, std::vector<int>> s;
+s.push(1);
+s.push(2);
+std::cout << s.top() << '\n';   // 2
+```
+
+```text
+2
+```
+
 ### Gotchas
 
 - `top()` and `pop()` on an **empty** stack are undefined behavior —

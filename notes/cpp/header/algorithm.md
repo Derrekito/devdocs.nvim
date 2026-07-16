@@ -66,6 +66,68 @@ Fold/sum lives in `<numeric>`, not `<algorithm>`:
 int total = std::accumulate(v.begin(), v.end(), 0);
 ```
 
+### Erase elements matching a predicate
+
+Pre-C++20, "removing" is a two-step dance: `std::remove_if` shuffles
+the survivors to the front and returns the new logical end, then
+`erase` drops the leftover tail — the erase-remove idiom:
+
+```cpp
+#include <algorithm>
+#include <iostream>
+#include <vector>
+
+int main()
+{
+    std::vector<int> v{3, 1, 4, 1, 5, 9, 2, 6};
+    v.erase(std::remove_if(v.begin(), v.end(),
+                           [](int x){ return x % 2 == 0; }),
+            v.end());
+    for (int x : v) std::cout << x << ' ';
+    std::cout << '\n';
+}
+```
+
+```text
+3 1 1 5 9
+```
+
+`std::erase_if` (C++20, in `<vector>`/`<algorithm>`) collapses that into
+one call and works the same way across containers:
+
+```cpp c++20
+#include <vector>
+
+std::vector<int> v{3, 1, 4, 1, 5, 9, 2, 6};
+std::erase_if(v, [](int x){ return x % 2 == 0; });   // 3 1 1 5 9
+```
+
+### Operate on containers directly with ranges (C++20)
+
+`std::ranges::` algorithms (`<algorithm>`) take the container itself —
+no `.begin()`/`.end()` pair — and are otherwise drop-in replacements:
+
+```cpp c++20
+#include <algorithm>
+#include <iostream>
+#include <vector>
+
+int main()
+{
+    std::vector<int> v{3, 1, 4, 1, 5, 9, 2, 6};
+    std::ranges::sort(v);
+    if (auto it = std::ranges::find(v, 5); it != v.end())
+        std::cout << "found 5\n";
+    for (int x : v) std::cout << x << ' ';
+    std::cout << '\n';
+}
+```
+
+```text
+found 5
+1 1 2 3 4 5 6 9
+```
+
 ### Gotchas
 
 - These are range-based, not container-based:

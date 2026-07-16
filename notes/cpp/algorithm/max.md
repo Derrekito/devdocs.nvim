@@ -1,7 +1,8 @@
 ### std::max in practice
 
 `std::max` returns the larger of two values — or the largest of an
-initializer list:
+initializer list. The initializer-list overload is C++11; both it and
+the two-argument overload became `constexpr` in C++14:
 
 ```cpp
 #include <algorithm>
@@ -25,12 +26,50 @@ int nonneg = std::max(0, -5);                      // 0  (floor at zero)
 ```
 
 For the largest element of a **range** use `std::max_element`, which
-returns an iterator:
+returns an iterator. In C++20, `std::ranges::max_element(v)` takes the
+container directly:
 
 ```cpp
 #include <vector>
 std::vector<int> v{5, 2, 8, 1};
 auto it = std::max_element(v.begin(), v.end());    // *it == 8
+```
+
+### Avoid a dangling reference from a temporary
+
+`std::max` returns a `const&` to whichever argument is larger. That's
+fine for named objects that outlive the statement, but binding it when
+an argument is a temporary leaves a dangling reference the moment the
+full expression ends — returning by reference across the call does not
+extend the temporary's lifetime:
+
+```cpp
+std::string longer_of(std::string a, std::string b)
+{
+    return a.size() >= b.size() ? a : b;
+}
+
+// WRONG: the temporary from longer_of(...) is destroyed at the end of
+// this statement, leaving `bad` dangling.
+const std::string& bad = std::max(longer_of("hi", "hey"),
+                                   std::string("hello"));
+
+// RIGHT: copy the winner instead of binding a reference to it.
+std::string good = std::max(longer_of("hi", "hey"),
+                             std::string("hello"));
+```
+
+### Get both extremes of a range in one pass
+
+`std::minmax_element` (C++11) finds both extremes in a single pass,
+returning a pair of iterators — cheaper than calling `min_element` and
+`max_element` separately:
+
+```cpp
+#include <vector>
+std::vector<int> v{5, 2, 8, 1};
+auto [lo, hi] = std::minmax_element(v.begin(), v.end());
+std::cout << *lo << ' ' << *hi << '\n';   // 1 8
 ```
 
 ### Gotchas
@@ -42,4 +81,5 @@ auto it = std::max_element(v.begin(), v.end());    // *it == 8
   double). Match them — `std::max(0.0, 1.5)` — or force the type with
   `std::max<double>(0, 1.5)`.
 - On a tie it returns the **first** argument. For both extremes in one
-  pass use `std::minmax` / `std::minmax_element`.
+  pass use `std::minmax` (pair of values) or `std::minmax_element`
+  (pair of iterators), both C++11.

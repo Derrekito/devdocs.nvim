@@ -1,7 +1,8 @@
 ### Weak references in practice
 
-`std::weak_ptr` observes a `shared_ptr` **without** owning it — it does
-not keep the object alive. Its main job is breaking reference cycles:
+`std::weak_ptr` (C++11) observes a `shared_ptr` **without** owning it —
+it does not keep the object alive. Its main job is breaking reference
+cycles:
 
 ```cpp
 #include <memory>
@@ -31,6 +32,55 @@ int main()
     std::cout << "expired: " << std::boolalpha << wp.expired() << '\n';
 }
 ```
+
+### Breaking a parent/child ownership cycle
+
+The classic leak: a `Parent` owns its `Child`ren via `shared_ptr`, and
+each `Child` points back to its `Parent` — also via `shared_ptr`. The
+cycle keeps both alive forever, even after the last outside reference
+is gone. Make the back-pointer a `weak_ptr` and the cycle disappears:
+
+```cpp
+#include <iostream>
+#include <memory>
+#include <vector>
+
+struct Child;
+
+struct Parent {
+    std::vector<std::shared_ptr<Child>> children;   // owns children
+    ~Parent() { std::cout << "Parent destroyed\n"; }
+};
+
+struct Child {
+    std::weak_ptr<Parent> parent;   // observes only — no cycle
+    ~Child() { std::cout << "Child destroyed\n"; }
+};
+
+int main()
+{
+    auto parent = std::make_shared<Parent>();
+    auto child  = std::make_shared<Child>();
+    child->parent = parent;               // weak: no bump to parent's count
+    parent->children.push_back(child);    // strong: parent owns child
+
+    if (auto p = child->parent.lock())
+        std::cout << "child can reach parent\n";
+
+    // Dropping the one strong reference to `parent` here destroys both,
+    // since child's back-reference no longer keeps parent's count alive.
+}
+```
+
+```text
+child can reach parent
+Parent destroyed
+Child destroyed
+```
+
+Had `Child::parent` been a `shared_ptr<Parent>` instead, both objects
+would keep each other's count at 1 forever after `main` returns —
+neither destructor would run, and neither `std::cout` line would print.
 
 ### Gotchas
 

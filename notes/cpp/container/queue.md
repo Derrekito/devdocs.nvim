@@ -35,6 +35,23 @@ while (!work.empty()) {
 }
 ```
 
+### Building a queue from existing data
+
+The constructor takes the underlying container directly — useful when
+you already built up a `std::deque` and just want FIFO access to it:
+
+```cpp
+#include <deque>
+
+std::deque<int> d{1, 2, 3};
+std::queue<int> q(d);           // copies d in as the initial contents
+std::cout << q.front() << '\n';
+```
+
+```text
+1
+```
+
 ### Gotchas
 
 - `front()`, `back()`, and `pop()` on an **empty** queue are undefined

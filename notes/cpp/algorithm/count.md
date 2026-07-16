@@ -27,6 +27,34 @@ std::string s = "mississippi";
 auto sn = std::count(s.begin(), s.end(), 's');   // 4
 ```
 
+### Count by a struct member (C++20: ranges projection)
+
+`std::ranges::count` (`<algorithm>`) takes the container directly and
+accepts a **projection**, so counting by a member needs no predicate
+lambda:
+
+```cpp c++20
+#include <algorithm>
+#include <iostream>
+#include <string>
+#include <vector>
+
+struct Person { std::string name; int age; };
+
+int main()
+{
+    std::vector<Person> people{
+        {"alice", 30}, {"bob", 30}, {"carol", 22}};
+
+    auto thirties = std::ranges::count(people, 30, &Person::age);
+    std::cout << thirties << '\n';
+}
+```
+
+```text
+2
+```
+
 ### Gotchas
 
 - The return type is the iterator's `difference_type` (a signed integer,

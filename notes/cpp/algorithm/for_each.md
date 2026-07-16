@@ -32,6 +32,55 @@ std::for_each(v.begin(), v.end(), [&sum](int x){ sum += x; });
 std::cout << "sum = " << sum << '\n';
 ```
 
+### Process only the first N elements (C++17: `for_each_n`)
+
+`std::for_each_n` takes a start and a count instead of a start/end
+pair — no need to compute `v.begin() + n` yourself:
+
+```cpp
+#include <algorithm>
+#include <iostream>
+#include <vector>
+
+int main()
+{
+    std::vector<int> v{1, 2, 3, 4, 5};
+    std::for_each_n(v.begin(), 3, [](int x){ std::cout << x << ' '; });
+    std::cout << '\n';
+}
+```
+
+```text
+1 2 3
+```
+
+### for_each with a projection (C++20: ranges)
+
+`std::ranges::for_each` (`<algorithm>`) takes the container directly
+and accepts a **projection**, applied before the callable — handy for
+running a side effect over one field of a struct:
+
+```cpp c++20
+#include <algorithm>
+#include <iostream>
+#include <string>
+#include <vector>
+
+struct Person { std::string name; int age; };
+
+int main()
+{
+    std::vector<Person> people{{"alice", 30}, {"bob", 25}};
+    std::ranges::for_each(people, [](int age){ std::cout << age << ' '; },
+                          &Person::age);
+    std::cout << '\n';
+}
+```
+
+```text
+30 25
+```
+
 ### Gotchas
 
 - Prefer a range-for (`for (int x : v)`) for the whole container — it's

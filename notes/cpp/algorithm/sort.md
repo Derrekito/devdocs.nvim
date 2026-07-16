@@ -59,6 +59,44 @@ if (std::binary_search(v.begin(), v.end(), 8))
     std::cout << "found\n";
 ```
 
+### Sort by a projection (C++20: ranges)
+
+`std::ranges::sort` (`<algorithm>`) takes the whole range directly —
+no `.begin()`/`.end()` pair — plus an optional **projection**, so
+sorting by a member needs no comparator lambda at all:
+
+```cpp c++20
+#include <algorithm>
+#include <iostream>
+#include <string>
+#include <vector>
+
+struct Person { std::string name; int age; };
+
+int main()
+{
+    std::vector<Person> people{
+        {"alice", 30}, {"bob", 25}, {"carol", 22}};
+
+    std::ranges::sort(people, {}, &Person::age);   // ascending by age
+    for (const auto& p : people) std::cout << p.name << ' ';
+    std::cout << '\n';
+
+    std::ranges::sort(people, std::ranges::greater{}, &Person::age);
+    for (const auto& p : people) std::cout << p.name << ' ';
+    std::cout << '\n';
+}
+```
+
+```text
+carol bob alice 
+alice bob carol
+```
+
+The `{}` in the first call is the default **comparator**
+(`std::ranges::less{}`) — the third argument, the projection, is doing
+the real work of picking `age` as the sort key.
+
 ### Gotchas
 
 - `std::sort` needs **random-access** iterators: fine on

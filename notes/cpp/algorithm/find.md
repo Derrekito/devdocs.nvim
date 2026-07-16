@@ -1,7 +1,9 @@
 ### Find in practice
 
 `std::find` locates the first element equal to a value and returns
-`end()` when there's no match — always test that first:
+`end()` when there's no match — always test that first. The
+`if (init; cond)` form below scopes `it` to the `if`/`else`; it's a
+C++17 addition (before that, `it` had to be declared one line above):
 
 ```cpp
 #include <algorithm>
@@ -32,6 +34,34 @@ predicate:
 ```cpp
 auto brk = std::find_if_not(v.begin(), v.end(),
                             [](int x){ return x % 2 == 0; });   // first odd
+```
+
+### Find by struct member (C++20: ranges projection)
+
+`std::ranges::find` (`<algorithm>`) takes the container directly and
+accepts a **projection**, so searching by a member needs no lambda:
+
+```cpp c++20
+#include <algorithm>
+#include <iostream>
+#include <string>
+#include <vector>
+
+struct Person { std::string name; int age; };
+
+int main()
+{
+    std::vector<Person> people{
+        {"alice", 30}, {"bob", 25}, {"carol", 22}};
+
+    auto it = std::ranges::find(people, 25, &Person::age);
+    if (it != people.end())
+        std::cout << it->name << '\n';
+}
+```
+
+```text
+bob
 ```
 
 ### Gotchas
