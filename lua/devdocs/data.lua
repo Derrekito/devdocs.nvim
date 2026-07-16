@@ -15,8 +15,20 @@ function M.plugin_root()
   return vim.fn.fnamemodify(src, ":h:h:h")
 end
 
-function M.root(name)
+-- Where :DevdocsUpdate downloads and converts to.
+function M.download_root(name)
   return cfg().data_dir .. "/" .. cfg().docsets[name].slug
+end
+
+-- Content root for reads: an owned manual (a tree with index.json +
+-- pages-md/ under a manual_dirs entry, e.g. a git submodule checked out at
+-- manuals/<name>) takes precedence over the downloaded tree in data_dir.
+function M.root(name)
+  for _, d in ipairs(cfg().manual_dirs or {}) do
+    local r = vim.fn.expand(d) .. "/" .. name
+    if vim.fn.filereadable(r .. "/index.json") == 1 then return r end
+  end
+  return M.download_root(name)
 end
 
 -- Drop cached indexes (config changed or docset re-downloaded).
@@ -94,9 +106,9 @@ end
 
 -- ── download + convert ──────────────────────────────────────────────────────
 
-local function update_one(name)
+local function update_one(name, done)
   local ds = cfg().docsets[name]
-  local r = M.root(name)
+  local r = M.download_root(name)
   local script = ([[
 set -e
 mkdir -p %s/pages
@@ -118,29 +130,83 @@ rm -f "$tmp"
     vim.fn.shellescape(r), ds.slug, vim.fn.shellescape(r), ds.slug, r,
     vim.fn.shellescape(M.plugin_root() .. "/scripts/convert.py"),
     vim.fn.shellescape(r), ds.lang or "text", cfg().width or 80)
-  local out = vim.fn.system({ "sh", "-c", "tmp=$(mktemp); export tmp; " .. script })
-  M.invalidate(name)
-  local ok = vim.v.shell_error == 0
-  vim.notify(("devdocs: %s %s — %s"):format(name, ok and "updated" or "FAILED", vim.trim(out)),
-    ok and vim.log.levels.INFO or vim.log.levels.ERROR)
-  return ok
+  vim.system({ "sh", "-c", "tmp=$(mktemp); export tmp; " .. script }, { text = true },
+    function(res)
+      vim.schedule(function()
+        M.invalidate(name)
+        local ok = res.code == 0
+        local out = vim.trim((res.stdout or "") .. (res.stderr or ""))
+        vim.notify(("devdocs: %s %s — %s"):format(name, ok and "updated" or "FAILED", out),
+          ok and vim.log.levels.INFO or vim.log.levels.ERROR)
+        if done then done() end
+      end)
+    end)
 end
 
--- Download + convert a docset (or all configured docsets). Blocking.
+-- Download + convert a docset (or all configured docsets). Runs in the
+-- background (vim.system): the editor stays responsive; each docset notifies
+-- as it finishes. Multiple docsets run sequentially — one download + one
+-- python conversion at a time is plenty, and the notifications stay ordered.
 function M.update(name)
   if name and name ~= "all" then
     if not cfg().docsets[name] then
       vim.notify("devdocs: unknown docset '" .. name .. "'", vim.log.levels.ERROR)
       return
     end
+    vim.notify("devdocs: updating " .. name .. " in the background…", vim.log.levels.INFO)
     update_one(name)
     return
   end
   local names = vim.tbl_keys(cfg().docsets)
   table.sort(names)
-  for _, n in ipairs(names) do
-    update_one(n)
+  vim.notify("devdocs: updating " .. table.concat(names, ", ") .. " in the background…",
+    vim.log.levels.INFO)
+  local i = 0
+  local function next_one()
+    i = i + 1
+    if names[i] then update_one(names[i], next_one) end
   end
+  next_one()
+end
+
+-- :DevdocsAdopt <docset> — take ownership of a docset: copy the installed
+-- tree (index.json + pages-md, not the intermediate HTML) into
+-- manual_dirs[1]/<name>, ready to refine, commit, and split into its own
+-- repo (e.g. added back here as a git submodule). Reads prefer the manual
+-- from then on; :DevdocsUpdate keeps writing only to data_dir.
+function M.adopt(name)
+  if not name or not cfg().docsets[name] then
+    vim.notify("devdocs: unknown docset '" .. tostring(name) .. "'", vim.log.levels.ERROR)
+    return
+  end
+  local dirs = cfg().manual_dirs or {}
+  if #dirs == 0 then
+    vim.notify("devdocs: no manual_dirs configured", vim.log.levels.ERROR)
+    return
+  end
+  local src = M.download_root(name)
+  if vim.fn.filereadable(src .. "/index.json") == 0 then
+    vim.notify("devdocs: '" .. name .. "' not installed — run :DevdocsUpdate " .. name,
+      vim.log.levels.WARN)
+    return
+  end
+  local dest = vim.fn.expand(dirs[1]) .. "/" .. name
+  if vim.fn.filereadable(dest .. "/index.json") == 1 then
+    vim.notify("devdocs: manual already exists at " .. dest, vim.log.levels.WARN)
+    return
+  end
+  vim.fn.mkdir(dest, "p")
+  local out = vim.fn.system({ "sh", "-c",
+    ("cp %s/index.json %s/ && cp -r %s/pages-md %s/")
+      :format(vim.fn.shellescape(src), vim.fn.shellescape(dest),
+        vim.fn.shellescape(src), vim.fn.shellescape(dest)) })
+  if vim.v.shell_error ~= 0 then
+    vim.notify("devdocs: adopt failed — " .. vim.trim(out), vim.log.levels.ERROR)
+    return
+  end
+  M.invalidate(name)
+  vim.notify(("devdocs: %s adopted into %s — refine it, then make it a repo/submodule; "
+    .. "pages are now read from there"):format(name, dest), vim.log.levels.INFO)
 end
 
 return M

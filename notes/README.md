@@ -38,10 +38,18 @@ ones you add yourself:
 - Write task-oriented content ("how do I list a directory"), not API
   re-description — the reference part of the page already does that.
 
+- State the language standard when it matters: name the version in
+  prose or the heading when a feature is version-gated ("`std::clamp`
+  is C++17"), and pin fences that need a newer standard than the
+  default with ` ```cpp c++20 ` so the checker compiles them with it.
+
 ## Quality bar for shipped notes
 
-- Every code example must compile/run as shown (e.g.
-  `g++ -std=c++17 -Wall -Wextra` for cpp notes) before committing.
+- Every code example must compile — enforced by `make check-examples`
+  (`g++ -std=c++17 -Wall -Wextra` for cpp; fragments get earlier fences'
+  context, see `scripts/check_examples.py`). Run it before committing.
+  ` ```cpp skip ` opts a fence out; use it sparingly and only for
+  intentionally illustrative non-code.
 - Verify the merged page renders in both viewers (`viewer = "man"` and
   `"markdown"`) before committing.
 

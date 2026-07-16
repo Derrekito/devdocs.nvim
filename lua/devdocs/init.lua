@@ -81,6 +81,11 @@ local notes = require("devdocs.notes")
 -- append your own directories via setup().
 M.config.notes_dirs = { data.plugin_root() .. "/notes" }
 
+-- Owned-manual sources: <dir>/<docset> trees (index.json + pages-md/) that
+-- take precedence over downloaded docsets — typically git submodules checked
+-- out under manuals/, one repo per language. Seed one with :DevdocsAdopt.
+M.config.manual_dirs = { data.plugin_root() .. "/manuals" }
+
 function M.setup(opts)
   M.config = vim.tbl_deep_extend("force", M.config, opts or {})
   data.invalidate() -- data_dir/docsets may have changed
@@ -90,6 +95,7 @@ end
 
 M.installed = data.installed
 M.update = data.update
+M.adopt = data.adopt
 
 -- Exact lookup (index, then custom notes pages); falls back to the picker
 -- pre-filtered with the word.

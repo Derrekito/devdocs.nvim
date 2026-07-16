@@ -19,6 +19,11 @@ vim.api.nvim_create_user_command("DevdocsUpdate", function(opts)
   require("devdocs").update(opts.fargs[1])
 end, { nargs = "?", complete = docset_names, desc = "Download + convert devdocs docsets" })
 
+vim.api.nvim_create_user_command("DevdocsAdopt", function(opts)
+  require("devdocs").adopt(opts.fargs[1])
+end, { nargs = 1, complete = docset_names,
+  desc = "Copy an installed docset into manuals/ to own and refine it" })
+
 vim.api.nvim_create_user_command("DevdocsNote", function()
   require("devdocs").note()
 end, { desc = "Annotate the current devdocs page" })
@@ -26,6 +31,12 @@ end, { desc = "Annotate the current devdocs page" })
 vim.api.nvim_create_user_command("DevdocsExamples", function(opts)
   require("devdocs").examples(opts.fargs)
 end, { nargs = "*", complete = docset_names, desc = "Browse code examples from devdocs notes" })
+
+-- :q inside a doc page abbreviates to this (see view.map_page_keys): pop
+-- back to the parent page, closing the window only at the top of the stack.
+vim.api.nvim_create_user_command("DevdocsBack", function(opts)
+  require("devdocs.view").back_or_close(opts.bang)
+end, { bang = true, desc = "devdocs: previous page, or close the page window" })
 
 -- Buffer-local gK in any filetype that maps to a docset. Checked at fire
 -- time so setup() can run before or after this file is sourced.

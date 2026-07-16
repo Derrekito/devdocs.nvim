@@ -373,6 +373,107 @@ describe("notes", function()
   end)
 end)
 
+describe("nested lookup quit", function()
+  local function nested_fixture()
+    vim.cmd("silent! only") -- window-count assertions need a clean layout
+    vim.cmd("runtime plugin/devdocs.lua") -- user commands (--noplugin test env)
+    local d = reload()
+    local dir = make_fixture()
+    write_file(dir .. "/cpp/pages-md/utility/bar.md", "# std::bar\n\nBar docs, see `std::foo`.\n")
+    write_file(dir .. "/cpp/index.json", vim.json.encode({ entries = {
+      { name = "std::foo", path = "utility/foo", type = "U" },
+      { name = "std::bar", path = "utility/bar", type = "U" },
+    } }))
+    d.setup({ data_dir = dir })
+    return d
+  end
+
+  local function buf_map(lhs)
+    for _, m in ipairs(vim.api.nvim_buf_get_keymap(0, "n")) do
+      if m.lhs == lhs then return m end
+    end
+  end
+
+  it("q backs out through followed references, closing only at the top", function()
+    local d = nested_fixture()
+    local wins = #vim.api.nvim_list_wins()
+    d.open("std::bar", "cpp")
+    vim.fn.search("std::foo")
+    buf_map("K").callback() -- nested lookup
+    assert.equals("devdocs://cpp/std::foo", vim.api.nvim_buf_get_name(0))
+
+    buf_map("q").callback() -- first quit: back to the parent entry
+    assert.equals("devdocs://cpp/std::bar", vim.api.nvim_buf_get_name(0))
+    assert.equals(wins + 1, #vim.api.nvim_list_wins(), "window still open")
+
+    buf_map("q").callback() -- no parent left: the window closes
+    assert.equals(wins, #vim.api.nvim_list_wins(), "window closed at top of stack")
+  end)
+
+  it(":q is rewritten to :DevdocsBack inside doc pages", function()
+    local d = nested_fixture()
+    local wins = #vim.api.nvim_list_wins()
+    d.open("std::bar", "cpp")
+    vim.fn.search("std::foo")
+    buf_map("K").callback()
+
+    vim.cmd("DevdocsBack") -- what the :q abbreviation expands to
+    assert.equals("devdocs://cpp/std::bar", vim.api.nvim_buf_get_name(0))
+    local abbrevs = vim.api.nvim_buf_get_keymap(0, "ca")
+    local found = false
+    for _, m in ipairs(abbrevs) do
+      if m.lhs == "q" then found = true end
+    end
+    assert.is_true(found, ":q cmdline abbreviation installed buffer-locally")
+    vim.cmd("DevdocsBack")
+    assert.equals(wins, #vim.api.nvim_list_wins(), "window closed at top of stack")
+  end)
+
+  it("Q (and :q!) closes the window immediately, history or not", function()
+    local d = nested_fixture()
+    local wins = #vim.api.nvim_list_wins()
+    d.open("std::bar", "cpp")
+    vim.fn.search("std::foo")
+    buf_map("K").callback()
+    buf_map("Q").callback()
+    assert.equals(wins, #vim.api.nvim_list_wins(), "closed despite history")
+  end)
+end)
+
+describe("owned manuals", function()
+  it("data.root prefers a manual tree over the downloaded docset", function()
+    local d = reload()
+    local dir = make_fixture()
+    local mdir = vim.fn.tempname()
+    write_file(mdir .. "/cpp/index.json", vim.json.encode({ entries = {
+      { name = "std::foo", path = "utility/foo", type = "U" },
+    } }))
+    write_file(mdir .. "/cpp/pages-md/utility/foo.md", "# std::foo\n\nOur own words.\n")
+    d.setup({ data_dir = dir, manual_dirs = { mdir } })
+
+    local data = require("devdocs.data")
+    assert.equals(mdir .. "/cpp", data.root("cpp"), "manual tree wins")
+    assert.equals(dir .. "/cpp", data.download_root("cpp"), "updates still target data_dir")
+
+    d.open("std::foo", "cpp")
+    local text = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n")
+    assert.is_truthy(text:match("Our own words"), "page served from the manual")
+    vim.cmd.close()
+  end)
+
+  it("adopt() seeds a manual from the installed docset", function()
+    local d = reload()
+    local dir = make_fixture()
+    local mdir = vim.fn.tempname()
+    d.setup({ data_dir = dir, manual_dirs = { mdir } })
+
+    d.adopt("cpp")
+    assert.equals(1, vim.fn.filereadable(mdir .. "/cpp/index.json"), "index copied")
+    assert.equals(1, vim.fn.filereadable(mdir .. "/cpp/pages-md/utility/foo.md"), "pages copied")
+    assert.equals(mdir .. "/cpp", require("devdocs.data").root("cpp"), "reads now use the manual")
+  end)
+end)
+
 describe("code examples", function()
   -- a page with two code blocks, plus an annotated notes example
   local function setup_with_examples()
@@ -571,6 +672,36 @@ describe("convert.py wrapping", function()
     end
     assert.is_truthy(out:match("\n%- lorem"), "list item present")
     assert.is_truthy(out:match("\n  %a"), "list continuation has hanging indent")
+  end)
+end)
+
+describe("check_examples.py", function()
+  it("passes good examples and fails broken ones", function()
+    local dir = vim.fn.tempname()
+    write_file(dir .. "/cpp/good.md", table.concat({
+      "### Works",
+      "",
+      "```cpp",
+      "std::vector<int> v{3, 1, 2};",
+      "std::sort(v.begin(), v.end());",
+      "```",
+      "",
+      "### Fragment building on context",
+      "",
+      "```cpp",
+      "v.push_back(4);",
+      "```",
+      "",
+    }, "\n"))
+    local script = vim.fn.getcwd() .. "/scripts/check_examples.py"
+    local out = vim.fn.system({ "python", script, "--notes", dir })
+    assert.equals(0, vim.v.shell_error, out)
+    assert.is_truthy(out:match("2 examples checked"), out)
+
+    write_file(dir .. "/cpp/bad.md", "### Broken\n\n```cpp\nint x = \"nope\";\n```\n")
+    out = vim.fn.system({ "python", script, "--notes", dir })
+    assert.equals(1, vim.v.shell_error, "broken example fails the check")
+    assert.is_truthy(out:match("1 failed"), out)
   end)
 end)
 

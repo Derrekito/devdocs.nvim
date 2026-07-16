@@ -46,7 +46,8 @@ local HELP = {
   "  C-t            previous page               ",
   "  gO             section TOC (man viewer)    ",
   "  C-h / g?       this help                   ",
-  "  q              close page (or this help)   ",
+  "  q  :q          back out (close at top)     ",
+  "  Q  :q!         close page window           ",
 }
 
 local function show_pager_help()
@@ -72,19 +73,51 @@ local function show_pager_help()
   return win
 end
 
+-- Nested-lookup quit: following references stacks pages man-style, so
+-- quitting unwinds the stack — q (and :q) pops back to the parent page and
+-- only closes the window once there is no parent left. force (Q / :q!)
+-- closes outright, history or not.
+function M.back_or_close(force)
+  local win = vim.api.nvim_get_current_win()
+  local h = history[win]
+  local prev = not force and h and table.remove(h)
+  if prev then
+    M.show(prev.docset, prev.name, prev.path, false)
+    return
+  end
+  history[win] = nil
+  if not pcall(vim.api.nvim_win_close, win, false) then
+    vim.cmd("quit" .. (force and "!" or "")) -- last window in the tab
+  end
+end
+
 -- Keys inside both viewers. Paging/search use nvim's native chords (listed
 -- in the help screen) so normal motions (h, b, d, u, Space) keep working:
 --   K / <C-]> / gK  follow the reference under the cursor (same docset)
 --   <C-T>           go back to the previous page
---   <C-H> / g?      help screen, q close
+--   <C-H> / g?      help screen; q backs out, Q closes
 local function map_page_keys(buf, docset)
   local function map(lhs, rhs, desc)
     vim.keymap.set("n", lhs, rhs, { buffer = buf, desc = "devdocs: " .. desc, nowait = true })
   end
 
-  map("q", "<cmd>close<cr>", "close page")
+  map("q", function() M.back_or_close(false) end, "previous page / close")
+  map("Q", function() M.back_or_close(true) end, "close page")
   map("<C-h>", show_pager_help, "pager help")
   map("g?", show_pager_help, "pager help")
+
+  -- :q / :quit in a doc page mean "back out", like the q key — rewritten via
+  -- buffer-local cmdline abbreviations. The bang survives expansion, so :q!
+  -- becomes :DevdocsBack! (force close); :qa and longer commands are left
+  -- alone (the getcmdline() guard only matches the bare command).
+  for _, cmd in ipairs({ "q", "quit" }) do
+    vim.keymap.set("ca", cmd, function()
+      if vim.fn.getcmdtype() == ":" and vim.fn.getcmdline() == cmd then
+        return "DevdocsBack"
+      end
+      return cmd
+    end, { buffer = buf, expr = true })
+  end
 
   local follow = function()
     local word = M.capture_word(docset)

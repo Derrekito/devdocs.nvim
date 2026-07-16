@@ -52,22 +52,24 @@ function M.check()
     health.error(("viewer = %q is not valid — use 'markdown' or 'man'"):format(tostring(config.viewer)))
   end
 
-  -- docsets on disk
+  -- docsets on disk (owned manuals take precedence over downloaded trees)
   health.start("docsets")
   local devdocs = require("devdocs")
+  local data = require("devdocs.data")
   local installed = devdocs.installed()
   if #installed == 0 then
     health.warn("no docsets installed — run :DevdocsUpdate")
   end
   for name, ds in vim.spairs(config.docsets) do
-    local dir = config.data_dir .. "/" .. ds.slug
+    local dir = data.root(name)
+    local source = dir ~= data.download_root(name) and ("manual: " .. dir) or ds.slug
     if vim.fn.filereadable(dir .. "/index.json") == 1 then
       local pages = #vim.fn.glob(dir .. "/pages-md/**/*.md", false, true)
       if pages > 0 then
-        health.ok(("%s (%s): %d pages converted"):format(name, ds.slug, pages))
+        health.ok(("%s (%s): %d pages"):format(name, source, pages))
       else
-        health.warn(("%s (%s): index present but no converted pages — run :DevdocsUpdate %s")
-          :format(name, ds.slug, name))
+        health.warn(("%s (%s): index present but no pages — run :DevdocsUpdate %s")
+          :format(name, source, name))
       end
     else
       health.warn(("%s (%s): not installed — run :DevdocsUpdate %s"):format(name, ds.slug, name))

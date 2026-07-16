@@ -45,7 +45,8 @@ Then download the docsets you want:
 | `:Devdocs <query>` | Browse, pre-filtered |
 | `:Devdocs <docset> [query]` | Browse one docset |
 | `:DevdocsExamples [docset] [query]` | Browse code examples from the notes (see below) |
-| `:DevdocsUpdate [docset]` | Download + convert |
+| `:DevdocsUpdate [docset]` | Download + convert (runs in the background) |
+| `:DevdocsAdopt <docset>` | Copy an installed docset into `manuals/` to own and refine it |
 
 Inside a doc page, press `<C-h>` (or `g?`) for the built-in help screen.
 Paging and search use Neovim's native keys — same letters as `less`, just
@@ -61,7 +62,13 @@ Ctrl-chorded — so normal editor motions stay untouched:
 | `<C-T>` | Back to the previous page |
 | `gO` | Section TOC (man viewer) |
 | `<C-h>` / `g?` | Help screen |
-| `q` | Close the page window |
+| `q` / `:q` | Back out one page; closes the window only at the top of the stack |
+| `Q` / `:q!` | Close the page window immediately |
+
+Following references (`K`/`gK`/`<C-]>`) inside a page is a **nested
+lookup**: each followed entry stacks on the previous one, and each
+`q`/`:q` unwinds one level — you land back on the entry you came from,
+and only quitting the last page closes the window.
 
 `]c`/`[c`/`gy` work in both viewers — the man viewer remembers where each
 fenced block landed after typesetting, and `gy` always yanks the original
@@ -207,6 +214,38 @@ into the plugin checkout). All sources that have a file for a page are
 appended in list order. Notes survive docset updates and reinstalls by
 construction.
 
+## Owning a manual
+
+Downloaded docsets are a starting point, not a destination: cppreference
+prose can be dense, and its structure isn't ours to change. To take
+ownership of a docset's content:
+
+1. `:DevdocsAdopt cpp` — copies the installed tree (`index.json` +
+   `pages-md/`) into `manuals/cpp/`.
+2. Make `manuals/cpp` its own git repository and add it back as a
+   **submodule** — one content repo per language, so the plugin repo
+   never becomes a monolith:
+
+   ```bash
+   cd manuals/cpp && git init && git add -A && git commit -m "Adopt cpp docset"
+   # push it somewhere, then in the plugin repo:
+   git submodule add <url> manuals/cpp
+   ```
+
+3. Refine pages in place — rewrite descriptions, restructure, delete
+   noise. Reads prefer `manuals/<docset>` over the downloaded tree from
+   then on (`:checkhealth devdocs` shows which source each docset uses),
+   and `:DevdocsUpdate` keeps writing only to `data_dir`, so a future
+   upstream refresh never touches your manual: adopt it into a scratch
+   directory and diff when a new spec lands.
+
+Notes still layer on top of manual pages exactly as they do on generated
+ones, so annotation content survives an adoption unchanged.
+
+**Licensing**: content derived from cppreference is CC-BY-SA — a
+published manual repo needs attribution and the same license. Docsets
+from other sources carry their own terms; check before publishing.
+
 ## Configuration (defaults shown)
 
 ```lua
@@ -221,6 +260,9 @@ require("devdocs").setup({
   reuse_window = true,  -- one docs window per tab (opens from code adopt it);
                         -- false: new split per open, for side-by-side pages
   notes_dirs = { "<plugin>/notes" }, -- note sources; first entry is writable
+  manual_dirs = { "<plugin>/manuals" }, -- owned-manual sources (see Owning a
+                                        -- manual); first entry is where
+                                        -- :DevdocsAdopt seeds new manuals
   docsets = {
     cpp    = { slug = "cpp",         lang = "cpp", prefixes = { "std::" } },
     c      = { slug = "c",           lang = "c" },
@@ -240,5 +282,15 @@ require("devdocs").setup({
 ## Tests
 
 ```
-make test
+make test               # plugin behavior (plenary)
+make check-examples     # compile-check every code example in notes/
+make check-examples-run # …also run full programs, diff ```text output
+make check              # both
 ```
+
+`check-examples` treats the notes as code under test: every fenced
+example must compile (`g++ -std=c++17 -Wall -Wextra` for cpp; fragments
+are wrapped in a main() that carries the context of earlier fences in
+the file). Pin a fence to a standard with ` ```cpp c++20 `, or opt one
+out with ` ```cpp skip `. With `--run`, a ` ```text ` fence directly
+after a full program is asserted against its stdout.
