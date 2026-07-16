@@ -38,13 +38,18 @@ M.config = {
   --                              'splitright')
   -- Following references reuses the page's window either way.
   split = "horizontal",
-  -- For a vertical split ("vertical"/"left"/"right"), hold the CODE window that
-  -- gK was fired from at `width` columns and 'winfixwidth' it; the docs pane
-  -- takes the leftover space. This keeps your editing frame at `width` instead
-  -- of the docs being carved off the frame edge, and survives <C-w>= and later
-  -- splits. Re-asserted on every open, so reuse_window follow-ups don't drift.
-  -- No effect on horizontal splits (there's no code-width to hold).
+  -- For a vertical split ("vertical"/"left"/"right"), hold the CODE window
+  -- that gK was fired from at a fixed column count and 'winfixwidth' it; the
+  -- docs pane takes the leftover space. This keeps your editing frame stable
+  -- instead of the docs being carved off the frame edge, and survives <C-w>=
+  -- and later splits. Re-asserted on every open, so reuse_window follow-ups
+  -- don't drift. No effect on horizontal splits (no code-width to hold).
   pin = false,
+  -- Column the pinned code window is held at — i.e. where the code/docs
+  -- split sits. nil uses `width`, so page text and code frame line up by
+  -- default; set it separately when your editing frame is wider than your
+  -- docs (e.g. width = 80, pin_width = 100).
+  pin_width = nil,
   -- true: one docs window per tab — opening a page from a code window adopts
   --       the existing docs window (replaced page goes on its <C-T> history).
   -- false: each open from a code window makes a new split (compare pages

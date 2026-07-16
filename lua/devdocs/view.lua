@@ -217,14 +217,16 @@ local function display(buf, page, push)
     target = vim.api.nvim_get_current_win()
   end
 
-  -- Keep the code frame at config.width on EVERY display (docs get the rest):
-  -- reuse_window means later gK / reference-follows reuse the docs window, so
-  -- re-asserting here keeps the code pane from drifting. Explicit set_width
-  -- survives 'equalalways' re-balancing; winfixwidth keeps <C-w>= and later
-  -- splits off the code pane. When gK is fired from inside a docs page there's
-  -- no code window to size, so we leave the layout alone.
+  -- Keep the code frame at a fixed column count on EVERY display (docs get
+  -- the rest): reuse_window means later gK / reference-follows reuse the
+  -- docs window, so re-asserting here keeps the code pane from drifting.
+  -- pin_width sets where the split sits; it defaults to `width` so code
+  -- frame and page text line up. Explicit set_width survives 'equalalways'
+  -- re-balancing; winfixwidth keeps <C-w>= and later splits off the code
+  -- pane. When gK is fired from inside a docs page there's no code window
+  -- to size, so we leave the layout alone.
   if cfg().pin and vertical and code_win and vim.api.nvim_win_is_valid(code_win) then
-    vim.api.nvim_win_set_width(code_win, cfg().width)
+    vim.api.nvim_win_set_width(code_win, cfg().pin_width or cfg().width)
     vim.wo[code_win].winfixwidth = true
   end
 

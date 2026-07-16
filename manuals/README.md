@@ -6,6 +6,12 @@ project stops mirroring upstream references and starts maintaining its
 own, one **git submodule per language** so no single repo becomes a
 monolith.
 
+Live today: `cpp/` →
+[devdocs-manual-cpp](https://github.com/Derrekito/devdocs-manual-cpp).
+Its `STYLE.md` defines the rewrite format (readable summary first,
+usage synopsis, gotchas promoted, full declarations preserved under
+Reference); `pages-md/algorithm/sort.md` is the canonical example.
+
 Workflow:
 
 1. `:DevdocsUpdate cpp` then `:DevdocsAdopt cpp` — seeds `manuals/cpp/`

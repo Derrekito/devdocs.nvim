@@ -259,6 +259,26 @@ describe("devdocs", function()
     end
   end)
 
+  it("pin holds the code window at pin_width (falling back to width)", function()
+    vim.cmd("silent! only")
+    vim.o.columns = 200
+    local d = reload()
+    d.setup({ data_dir = make_fixture(), split = "right", pin = true, pin_width = 55 })
+    local code_win = vim.api.nvim_get_current_win()
+    d.open("std::foo", "cpp")
+    assert.equals(55, vim.api.nvim_win_get_width(code_win), "split sits at pin_width")
+    assert.is_true(vim.wo[code_win].winfixwidth, "code window width is fixed")
+    vim.cmd.close()
+
+    -- without pin_width, the split falls back to `width`
+    d = reload()
+    d.setup({ data_dir = make_fixture(), split = "right", pin = true, width = 60 })
+    code_win = vim.api.nvim_get_current_win()
+    d.open("std::foo", "cpp")
+    assert.equals(60, vim.api.nvim_win_get_width(code_win), "defaults to width")
+    vim.cmd.close()
+  end)
+
   it("viewer='man' shows the page through :Man machinery", function()
     local d = reload()
     d.setup({ data_dir = make_fixture(), viewer = "man" })

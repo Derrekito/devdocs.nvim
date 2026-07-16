@@ -29,6 +29,12 @@ installed.
 }
 ```
 
+The curated C++ manual ships as a git **submodule** at `manuals/cpp`
+(see [Owning a manual](#owning-a-manual)). lazy.nvim fetches submodules
+by default; for a manual clone use `git clone --recurse-submodules` (or
+`git submodule update --init` after the fact). Without it the plugin
+still works — docsets just come entirely from `:DevdocsUpdate`.
+
 Then download the docsets you want:
 
 ```
@@ -224,8 +230,17 @@ construction.
 ## Owning a manual
 
 Downloaded docsets are a starting point, not a destination: cppreference
-prose can be dense, and its structure isn't ours to change. To take
-ownership of a docset's content:
+prose can be dense, and its structure isn't ours to change. The C++
+docset is already owned this way: `manuals/cpp` is a submodule of
+[devdocs-manual-cpp](https://github.com/Derrekito/devdocs-manual-cpp),
+where the most-used pages are progressively rewritten for readability —
+plain-language summary first, usage synopsis instead of template walls,
+gotchas promoted, full declarations preserved under a Reference
+section. Its `STYLE.md` is the format contract for rewrites, and every
+example on a rewritten page is compile- and output-checked by
+`make check-examples`.
+
+To take ownership of another docset's content:
 
 1. `:DevdocsAdopt cpp` — copies the installed tree (`index.json` +
    `pages-md/`) into `manuals/cpp/`.
@@ -264,6 +279,13 @@ require("devdocs").setup({
   split = "horizontal", -- "above"|"below"|"left"|"right" place relative to the
                         -- current window; "horizontal"|"vertical" obey
                         -- 'splitbelow'/'splitright'
+  pin = false,          -- vertical splits only: hold the CODE window at a
+                        -- fixed column count ('winfixwidth'), docs take the
+                        -- leftover space; survives <C-w>= and later splits
+  pin_width = nil,      -- column where the code/docs split sits when pinned;
+                        -- nil uses `width` (code frame and page text line
+                        -- up); set separately for a wider editing frame,
+                        -- e.g. width = 80, pin_width = 100
   reuse_window = true,  -- one docs window per tab (opens from code adopt it);
                         -- false: new split per open, for side-by-side pages
   notes_dirs = { "<plugin>/notes" }, -- note sources; first entry is writable
