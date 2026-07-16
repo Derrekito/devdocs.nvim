@@ -1,0 +1,3 @@
+[submodule "manuals/cpp"]
+	path = manuals/cpp
+	url = git@github.com:Derrekito/devdocs-manual-cpp.git
