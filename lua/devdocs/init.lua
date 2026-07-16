@@ -36,6 +36,13 @@ M.config = {
   --                              'splitright')
   -- Following references reuses the page's window either way.
   split = "horizontal",
+  -- For a vertical split ("vertical"/"left"/"right"), hold the CODE window that
+  -- gK was fired from at `width` columns and 'winfixwidth' it; the docs pane
+  -- takes the leftover space. This keeps your editing frame at `width` instead
+  -- of the docs being carved off the frame edge, and survives <C-w>= and later
+  -- splits. Re-asserted on every open, so reuse_window follow-ups don't drift.
+  -- No effect on horizontal splits (there's no code-width to hold).
+  pin = false,
   -- true: one docs window per tab — opening a page from a code window adopts
   --       the existing docs window (replaced page goes on its <C-T> history).
   -- false: each open from a code window makes a new split (compare pages

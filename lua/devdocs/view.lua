@@ -117,6 +117,18 @@ end
 -- pushing the replaced page onto that window's <C-T> history unless this is
 -- back-navigation. Otherwise open a split per config.
 local function display(buf, page, push)
+  -- "vertical"/"left"/"right" produce a vsplit; the rest are horizontal.
+  local vertical = ({ vertical = true, left = true, right = true })[cfg().split] or false
+
+  -- The code window we're opening docs alongside: the window gK was invoked
+  -- from, when that isn't itself a docs window. We size THIS to config.width
+  -- (docs take the leftover space), so the code frame stays at `width` columns
+  -- rather than the docs pane being carved off the frame edge.
+  local code_win
+  if not vim.b[vim.api.nvim_get_current_buf()].devdocs then
+    code_win = vim.api.nvim_get_current_win()
+  end
+
   local target
   if vim.b[vim.api.nvim_get_current_buf()].devdocs then
     target = vim.api.nvim_get_current_win()
@@ -148,7 +160,20 @@ local function display(buf, page, push)
     }
     vim.cmd(split_cmds[cfg().split] or "split")
     vim.api.nvim_win_set_buf(0, buf)
+    target = vim.api.nvim_get_current_win()
   end
+
+  -- Keep the code frame at config.width on EVERY display (docs get the rest):
+  -- reuse_window means later gK / reference-follows reuse the docs window, so
+  -- re-asserting here keeps the code pane from drifting. Explicit set_width
+  -- survives 'equalalways' re-balancing; winfixwidth keeps <C-w>= and later
+  -- splits off the code pane. When gK is fired from inside a docs page there's
+  -- no code window to size, so we leave the layout alone.
+  if cfg().pin and vertical and code_win and vim.api.nvim_win_is_valid(code_win) then
+    vim.api.nvim_win_set_width(code_win, cfg().width)
+    vim.wo[code_win].winfixwidth = true
+  end
+
   vim.b[buf].devdocs = page
 end
 
