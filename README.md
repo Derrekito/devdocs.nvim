@@ -41,9 +41,10 @@ Then download the docsets you want:
 | Mapping/Command | Action |
 |---|---|
 | `gK` (in mapped filetypes) | Look up the symbol under the cursor (exact match, falls back to search) |
-| `:Devdocs` | Fuzzy-browse every installed docset |
+| `:Devdocs` | Fuzzy-browse every installed docset (with page preview) |
 | `:Devdocs <query>` | Browse, pre-filtered |
 | `:Devdocs <docset> [query]` | Browse one docset |
+| `:DevdocsExamples [docset] [query]` | Browse code examples from the notes (see below) |
 | `:DevdocsUpdate [docset]` | Download + convert |
 
 Inside a doc page, press `<C-h>` (or `g?`) for the built-in help screen.
@@ -55,10 +56,16 @@ Ctrl-chorded — so normal editor motions stay untouched:
 | `<C-f>` / `<C-b>` | Page forward / back |
 | `<C-d>` / `<C-u>` | Half page forward / back |
 | `K` / `<C-]>` / `gK` | Follow the reference under the cursor (same docset, replaces in-window) |
+| `]c` / `[c` | Jump to the next / previous code block |
+| `gy` | Yank the code block under the cursor (unnamed register + clipboard) |
 | `<C-T>` | Back to the previous page |
 | `gO` | Section TOC (man viewer) |
 | `<C-h>` / `g?` | Help screen |
 | `q` | Close the page window |
+
+`]c`/`[c`/`gy` work in both viewers — the man viewer remembers where each
+fenced block landed after typesetting, and `gy` always yanks the original
+source, never troff indentation.
 
 `gK` resolves what's under the cursor in stages: LSP-derived candidates
 first (the language server knows a variable's type and a member's qualified
@@ -180,6 +187,13 @@ notes/
 
 The same layout works for every docset in your config — add a `rust`
 docset and `notes/rust/…` works immediately, nothing else to wire up.
+
+**Finding examples**: `:DevdocsExamples [docset] [query]` is a picker
+over every fenced code example in the notes, titled
+`page › nearest heading` and matched against the code itself — typing
+`stable_sort` finds the example that uses it even if no heading mentions
+it. `<CR>` opens the page positioned at that example; `<C-y>` yanks the
+code straight from the picker without opening anything.
 
 **Authoring workflow**: open a page, run `:DevdocsNote`, write, save —
 the next view shows the merged result. Conventions and the quality bar

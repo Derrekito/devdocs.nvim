@@ -29,7 +29,12 @@ ones you add yourself:
   name.
 - Code examples go in fenced blocks with a language (` ```cpp `,
   ` ```cmake `, …) so both viewers highlight them. Expected output goes
-  in ` ```text ` fences.
+  in ` ```text ` fences (output fences are excluded from the
+  `:DevdocsExamples` index).
+- Every fenced example is indexed by `:DevdocsExamples` under its
+  nearest heading, so write headings that describe the task ("Sort
+  structs by a member"), not the API ("Overload (3)") — the heading is
+  what people fuzzy-search for.
 - Write task-oriented content ("how do I list a directory"), not API
   re-description — the reference part of the page already does that.
 

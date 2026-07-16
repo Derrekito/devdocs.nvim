@@ -23,6 +23,10 @@ vim.api.nvim_create_user_command("DevdocsNote", function()
   require("devdocs").note()
 end, { desc = "Annotate the current devdocs page" })
 
+vim.api.nvim_create_user_command("DevdocsExamples", function(opts)
+  require("devdocs").examples(opts.fargs)
+end, { nargs = "*", complete = docset_names, desc = "Browse code examples from devdocs notes" })
+
 -- Buffer-local gK in any filetype that maps to a docset. Checked at fire
 -- time so setup() can run before or after this file is sourced.
 vim.api.nvim_create_autocmd("FileType", {

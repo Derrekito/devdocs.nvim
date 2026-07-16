@@ -41,6 +41,8 @@ local HELP = {
   "  /  ?  n  N     search forward / back       ",
   "  gg / G         top / bottom                ",
   "  K  C-]  gK     follow reference at cursor  ",
+  "  ]c / [c        next / previous code block  ",
+  "  gy             yank code block at cursor   ",
   "  C-t            previous page               ",
   "  gO             section TOC (man viewer)    ",
   "  C-h / g?       this help                   ",
@@ -91,6 +93,13 @@ local function map_page_keys(buf, docset)
   for _, lhs in ipairs({ "K", "gK", "<C-]>" }) do
     map(lhs, follow, "follow reference")
   end
+
+  -- code-example navigation: doc pages are never diff buffers, so ]c/[c are
+  -- free to mean "next/previous code block" here
+  local examples = require("devdocs.examples")
+  map("]c", function() examples.jump(1) end, "next code block")
+  map("[c", function() examples.jump(-1) end, "previous code block")
+  map("gy", examples.yank, "yank code block")
 
   map("<C-t>", function()
     local h = history[vim.api.nvim_get_current_win()]
@@ -271,14 +280,24 @@ local function ts_highlight_region(buf, lang, cols)
 end
 
 -- Paint all code blocks of a man-rendered page: background for the block
--- (DevdocsCodeBlock, override to taste) + treesitter syntax.
+-- (DevdocsCodeBlock, override to taste) + treesitter syntax. Located regions
+-- are recorded in b:devdocs_code_blocks so ]c/[c/gy work here too — the
+-- rendered page has no fences left to parse (lines hold the original code,
+-- so gy yanks clean source, not troff indentation).
 local function highlight_man_code(buf, md_file)
   vim.api.nvim_set_hl(0, "DevdocsCodeBlock", { default = true, link = "ColorColumn" })
   local rendered = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
   local from = 1
+  local regions = {}
   for _, block in ipairs(md_code_blocks(md_file)) do
     local row, cols, next_from = locate_block(rendered, block.lines, from)
     if row then
+      table.insert(regions, {
+        srow = cols[1].row,
+        erow = cols[#cols].row,
+        lang = block.lang,
+        lines = block.lines,
+      })
       for _, c in ipairs(cols) do
         vim.api.nvim_buf_set_extmark(buf, code_ns, c.row - 1, 0, {
           line_hl_group = "DevdocsCodeBlock",
@@ -291,6 +310,7 @@ local function highlight_man_code(buf, md_file)
       from = next_from
     end
   end
+  vim.b[buf].devdocs_code_blocks = regions
 end
 
 -- ── viewers ─────────────────────────────────────────────────────────────────
@@ -353,12 +373,26 @@ local function show_man(docset, name, path, md_file, push)
   return true
 end
 
+-- Merged page content: the generated page plus any annotations from the
+-- configured notes_dirs (an absolute path is a custom notes page, served
+-- directly from its file). Both viewers and the :Devdocs previewer render
+-- exactly these lines. Returns nil, file when the page file is absent.
+function M.page_lines(docset, path)
+  local custom = path:sub(1, 1) == "/"
+  local file = custom and path
+    or (data.root(docset) .. "/pages-md/" .. path:gsub("#.*$", "") .. ".md")
+  if vim.fn.filereadable(file) == 0 then return nil, file end
+  local lines = vim.fn.readfile(file)
+  local annotations = custom and {} or require("devdocs.notes").annotations(docset, path)
+  for _, a in ipairs(annotations) do
+    table.insert(lines, "")
+    vim.list_extend(lines, vim.fn.readfile(a))
+  end
+  return lines, file, #annotations > 0
+end
+
 -- Show a page (path without #anchor). push=false means back-navigation
 -- (don't record the page we're leaving in the window history).
--- An absolute path is a custom notes page served directly from its file;
--- otherwise the generated page is read and any annotations from the
--- configured notes_dirs are appended before rendering, so both viewers (and
--- the man code highlighter) see the merged document.
 function M.show(docset, name, path, push)
   if push == nil then push = true end
 
@@ -374,25 +408,16 @@ function M.show(docset, name, path, push)
       end
     end
   end
-  local custom = path:sub(1, 1) == "/"
-  local file = custom and path
-    or (data.root(docset) .. "/pages-md/" .. path:gsub("#.*$", "") .. ".md")
-  if vim.fn.filereadable(file) == 0 then
+  local lines, file, annotated = M.page_lines(docset, path)
+  if not lines then
     vim.notify("devdocs: page missing: " .. file .. " — run :DevdocsUpdate " .. docset,
       vim.log.levels.WARN)
     return
   end
 
-  local lines = vim.fn.readfile(file)
-  local annotations = custom and {} or require("devdocs.notes").annotations(docset, path)
-  for _, a in ipairs(annotations) do
-    table.insert(lines, "")
-    vim.list_extend(lines, vim.fn.readfile(a))
-  end
-
   if cfg().viewer == "man" then
     local md_file, tmp = file, nil
-    if #annotations > 0 then
+    if annotated then
       tmp = vim.fn.tempname() .. ".md"
       vim.fn.writefile(lines, tmp)
       md_file = tmp

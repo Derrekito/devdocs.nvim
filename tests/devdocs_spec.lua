@@ -373,6 +373,126 @@ describe("notes", function()
   end)
 end)
 
+describe("code examples", function()
+  -- a page with two code blocks, plus an annotated notes example
+  local function setup_with_examples()
+    local d = reload()
+    local dir = make_fixture()
+    write_file(dir .. "/cpp/pages-md/utility/foo.md", table.concat({
+      "# std::foo",
+      "",
+      "Intro text.",
+      "",
+      "```c",
+      "int first(void) { return 1; }",
+      "```",
+      "",
+      "More prose.",
+      "",
+      "```c",
+      "int second(void) { return 2; }",
+      "int second_line_two(void) { return 22; }",
+      "```",
+      "",
+    }, "\n"))
+    local ndir = vim.fn.tempname()
+    write_file(ndir .. "/cpp/utility/foo.md", table.concat({
+      "### Using foo in practice",
+      "",
+      "```c",
+      "int note_example(void) { return 3; }",
+      "```",
+      "",
+      "Expected output:",
+      "",
+      "```text",
+      "3",
+      "```",
+      "",
+    }, "\n"))
+    write_file(ndir .. "/cpp/guides/foo-guide.md", table.concat({
+      "# Foo guide",
+      "",
+      "## Setup",
+      "",
+      "```c",
+      "int guide_example(void) { return 4; }",
+      "```",
+      "",
+    }, "\n"))
+    d.setup({ data_dir = dir, notes_dirs = { ndir } })
+    return d, dir, ndir
+  end
+
+  local function buf_map(lhs)
+    for _, m in ipairs(vim.api.nvim_buf_get_keymap(0, "n")) do
+      if m.lhs == lhs then return m end
+    end
+  end
+
+  it("]c / [c jump between code blocks in the markdown viewer", function()
+    local d = setup_with_examples()
+    d.open("std::foo", "cpp")
+    assert.is_not_nil(buf_map("]c"), "]c mapped in doc buffer")
+    vim.api.nvim_win_set_cursor(0, { 1, 0 })
+
+    buf_map("]c").callback()
+    assert.equals("int first(void) { return 1; }", vim.api.nvim_get_current_line())
+    buf_map("]c").callback()
+    assert.equals("int second(void) { return 2; }", vim.api.nvim_get_current_line())
+    buf_map("]c").callback() -- into the annotation's example
+    assert.equals("int note_example(void) { return 3; }", vim.api.nvim_get_current_line())
+    buf_map("[c").callback()
+    assert.equals("int second(void) { return 2; }", vim.api.nvim_get_current_line())
+    vim.cmd.close()
+  end)
+
+  it("gy yanks the code block under the cursor", function()
+    local d = setup_with_examples()
+    d.open("std::foo", "cpp")
+    vim.fn.search("second_line_two")
+    buf_map("gy").callback()
+    assert.equals("int second(void) { return 2; }\nint second_line_two(void) { return 22; }\n",
+      vim.fn.getreg('"'))
+    assert.equals("V", vim.fn.getregtype('"'), "linewise yank")
+    vim.cmd.close()
+  end)
+
+  it("man viewer records block regions so ]c/gy work without fences", function()
+    local d = setup_with_examples()
+    require("devdocs").setup({ viewer = "man" })
+    d.open("std::foo", "cpp")
+    assert.equals("man", vim.bo.filetype)
+    local blocks = require("devdocs.examples").buf_blocks(vim.api.nvim_get_current_buf())
+    assert.equals(4, #blocks, "all blocks located (page + annotation, text fence included)")
+    assert.equals("c", blocks[1].lang)
+    assert.same({ "int first(void) { return 1; }" }, blocks[1].lines)
+
+    vim.api.nvim_win_set_cursor(0, { 1, 0 })
+    buf_map("]c").callback()
+    assert.equals(blocks[1].srow, vim.api.nvim_win_get_cursor(0)[1], "]c lands on the block")
+    buf_map("gy").callback()
+    assert.equals("int first(void) { return 1; }\n", vim.fn.getreg('"'), "yanks clean source")
+    vim.cmd.close()
+  end)
+
+  it("entries() indexes notes examples by nearest heading, skipping text fences", function()
+    setup_with_examples()
+    local entries = require("devdocs.examples").entries("cpp")
+    assert.equals(2, #entries, "code fences indexed, ```text output fence skipped")
+    table.sort(entries, function(a, b) return a.title < b.title end)
+
+    assert.equals("Setup", entries[1].title, "custom page example titled by nearest heading")
+    assert.equals("Foo guide", entries[1].page_name)
+    assert.same({ "int guide_example(void) { return 4; }" }, entries[1].lines)
+    assert.is_truthy(entries[1].page_path:sub(1, 1) == "/", "custom page served from its file")
+
+    assert.equals("Using foo in practice", entries[2].title)
+    assert.equals("std::foo", entries[2].page_name, "annotation resolved to its index entry")
+    assert.equals("utility/foo", entries[2].page_path)
+  end)
+end)
+
 describe("LSP candidate resolution", function()
   -- fixtures captured from real clangd 22 responses
   local HOVER = "### variable `oss`\n\n---\nType: `std::ostringstream (aka basic_ostringstream<char>)`\n\n---\n```cpp\n// In f\nstd::ostringstream oss\n```"

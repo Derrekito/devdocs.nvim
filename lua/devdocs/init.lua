@@ -6,14 +6,16 @@
 -- :Devdocs                  — fuzzy-browse every installed docset
 -- :Devdocs <query>          — browse, pre-filtered
 -- :Devdocs <docset> [query] — browse one docset
+-- :DevdocsExamples [docset] — browse fenced code examples from the notes
 -- :DevdocsUpdate [docset]   — download + convert one docset (default: all)
 -- gK (mapped filetypes)     — exact lookup of the symbol under the cursor
 --
 -- Module layout:
---   devdocs       (this file) config, setup, entry points (open/search/cmd)
---   devdocs.data  index loading, install state, download/convert pipeline
---   devdocs.view  markdown + man viewers, pager keys/history/help, code hl
---   devdocs.lsp   LSP candidate resolution for gK
+--   devdocs          (this file) config, setup, entry points (open/search/cmd)
+--   devdocs.data     index loading, install state, download/convert pipeline
+--   devdocs.view     markdown + man viewers, pager keys/history/help, code hl
+--   devdocs.lsp      LSP candidate resolution for gK
+--   devdocs.examples code-block navigation (]c/[c/gy) + examples picker
 
 local M = {}
 
@@ -146,6 +148,8 @@ function M.search(query, docset)
   local conf = require("telescope.config").values
   local actions = require("telescope.actions")
   local action_state = require("telescope.actions.state")
+  local previewers = require("telescope.previewers")
+  local putils = require("telescope.previewers.utils")
 
   pickers.new({}, {
     prompt_title = docset and ("devdocs: " .. docset) or "devdocs",
@@ -157,6 +161,20 @@ function M.search(query, docset)
       end,
     }),
     sorter = conf.generic_sorter({}),
+    -- preview the merged page (generated + annotations) while filtering
+    previewer = previewers.new_buffer_previewer({
+      title = "page",
+      get_buffer_by_name = function(_, entry)
+        return entry.value.docset .. "/" .. entry.value.entry.path
+      end,
+      define_preview = function(self, entry)
+        local it = entry.value
+        local lines = view.page_lines(it.docset, it.entry.path)
+          or { "(page not installed — run :DevdocsUpdate " .. it.docset .. ")" }
+        vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, lines)
+        pcall(putils.highlighter, self.state.bufnr, "markdown")
+      end,
+    }),
     attach_mappings = function(bufnr)
       actions.select_default:replace(function()
         actions.close(bufnr)
@@ -175,6 +193,17 @@ function M.cmd(fargs)
     docset = table.remove(fargs, 1)
   end
   M.search(table.concat(fargs, " "), docset)
+end
+
+-- :DevdocsExamples [docset] [query...] — picker over every fenced code
+-- example in the notes sources, titled by its nearest heading and matched by
+-- code content too. <CR> opens the page at the example; <C-y> yanks it.
+function M.examples(fargs)
+  local docset = nil
+  if fargs[1] and M.config.docsets[fargs[1]] then
+    docset = table.remove(fargs, 1)
+  end
+  require("devdocs.examples").picker(table.concat(fargs, " "), docset)
 end
 
 -- :DevdocsNote — open (creating if needed) the annotation file for the doc
