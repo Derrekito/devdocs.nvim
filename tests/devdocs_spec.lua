@@ -2,7 +2,12 @@
 
 local function reload()
   package.loaded["devdocs"] = nil
-  return require("devdocs")
+  local d = require("devdocs")
+  -- keep the repo's real owned manuals (manuals/cpp, …) out of fixture
+  -- lookups; assigned directly because setup()'s tbl_deep_extend cannot
+  -- clear a list. Tests that need a manual pass manual_dirs to setup().
+  d.config.manual_dirs = {}
+  return d
 end
 
 local function write_file(path, content)
