@@ -415,23 +415,36 @@ describe("nested lookup quit", function()
     assert.equals(wins, #vim.api.nvim_list_wins(), "window closed at top of stack")
   end)
 
-  it(":q is rewritten to :DevdocsBack inside doc pages", function()
+  it("typing :q<CR> backs out (buffer-local cmdline <CR> rewrite)", function()
     local d = nested_fixture()
     local wins = #vim.api.nvim_list_wins()
     d.open("std::bar", "cpp")
     vim.fn.search("std::foo")
     buf_map("K").callback()
 
-    vim.cmd("DevdocsBack") -- what the :q abbreviation expands to
-    assert.equals("devdocs://cpp/std::bar", vim.api.nvim_buf_get_name(0))
-    local abbrevs = vim.api.nvim_buf_get_keymap(0, "ca")
+    -- the real typed path: a buffer-local c-mode <CR> mapping rewrites the
+    -- bare :q at execution time (abbreviations alone are skipped when
+    -- plugins like cmp-cmdline own the global cmdline <CR>)
     local found = false
-    for _, m in ipairs(abbrevs) do
-      if m.lhs == "q" then found = true end
+    for _, m in ipairs(vim.api.nvim_buf_get_keymap(0, "c")) do
+      if m.lhs == "<CR>" then found = true end
     end
-    assert.is_true(found, ":q cmdline abbreviation installed buffer-locally")
-    vim.cmd("DevdocsBack")
+    assert.is_true(found, "buffer-local cmdline <CR> mapping installed")
+
+    vim.api.nvim_feedkeys(":q\r", "tx", false)
+    assert.equals("devdocs://cpp/std::bar", vim.api.nvim_buf_get_name(0),
+      ":q popped back to the parent page")
+    assert.equals(wins + 1, #vim.api.nvim_list_wins(), "window still open")
+
+    vim.api.nvim_feedkeys(":quit\r", "tx", false)
     assert.equals(wins, #vim.api.nvim_list_wins(), "window closed at top of stack")
+
+    -- longer commands fall through to native <CR> (e.g. :qa is untouched);
+    -- just verify a harmless other command still executes normally
+    d.open("std::bar", "cpp")
+    vim.api.nvim_feedkeys(":let g:devdocs_test_passthrough = 1\r", "tx", false)
+    assert.equals(1, vim.g.devdocs_test_passthrough, "other cmdlines execute unchanged")
+    vim.cmd.close()
   end)
 
   it("Q (and :q!) closes the window immediately, history or not", function()

@@ -110,18 +110,24 @@ local function map_page_keys(buf, docset)
   map("<C-h>", show_pager_help, "pager help")
   map("g?", show_pager_help, "pager help")
 
-  -- :q / :quit in a doc page mean "back out", like the q key — rewritten via
-  -- buffer-local cmdline abbreviations. The bang survives expansion, so :q!
-  -- becomes :DevdocsBack! (force close); :qa and longer commands are left
-  -- alone (the getcmdline() guard only matches the bare command).
-  for _, cmd in ipairs({ "q", "quit" }) do
-    vim.keymap.set("ca", cmd, function()
-      if vim.fn.getcmdtype() == ":" and vim.fn.getcmdline() == cmd then
-        return "DevdocsBack"
+  -- :q / :quit in a doc page mean "back out", like the q key. A cmdline
+  -- abbreviation is NOT enough here: completion plugins (cmp-cmdline, …)
+  -- map <CR> globally in cmdline mode and feed the command through
+  -- untyped, which skips abbreviation expansion — the raw :q would fire.
+  -- Instead intercept at the same layer with a buffer-local <CR> mapping
+  -- (buffer-local always beats their global map) and rewrite the command
+  -- at execution time. :qa and anything longer fall through untouched.
+  vim.keymap.set("c", "<CR>", function()
+    if vim.fn.getcmdtype() == ":" then
+      local line = vim.fn.getcmdline()
+      if line == "q" or line == "quit" then
+        return "<C-u>DevdocsBack<CR>"
+      elseif line == "q!" or line == "quit!" then
+        return "<C-u>DevdocsBack!<CR>"
       end
-      return cmd
-    end, { buffer = buf, expr = true })
-  end
+    end
+    return "<CR>"
+  end, { buffer = buf, expr = true, desc = "devdocs: :q backs out one page" })
 
   local follow = function()
     local word = M.capture_word(docset)
