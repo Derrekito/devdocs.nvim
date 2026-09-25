@@ -31,6 +31,10 @@ Usage:
 --lang sets the default fence language for code blocks.
 """
 
+# Keeps annotations like `str | None` unevaluated, so this runs on Python 3.9
+# (Rocky/RHEL 9's python3) as well as 3.10+.
+from __future__ import annotations
+
 import re
 import sys
 import pathlib
